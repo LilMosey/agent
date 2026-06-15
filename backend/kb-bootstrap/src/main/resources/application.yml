@@ -22,5 +22,11 @@ app:
     minio:
       endpoint: http://localhost:9000
       bucket: enterprise-kb-files
-      access-key: change-me
-      secret-key: change-me
+      access-key: minioadmin
+      secret-key: minioadmin123
+  vector:
+    milvus:
+      host: localhost
+      port: 19530
+      database: default
+      collection-prefix: enterprise_kb

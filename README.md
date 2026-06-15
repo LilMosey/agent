@@ -55,6 +55,40 @@ mvn -q -DskipTests compile
 
 MySQL 和 MinIO 安装、启动、账号配置由用户执行。Milvus 是后续 RAG 阶段依赖，第一版文件管理不强依赖。
 
+## Docker 本地环境配置
+
+`docker-compose.yml` 默认提供：
+
+- MySQL：`localhost:3306`
+- MinIO API：`http://localhost:9000`
+- MinIO 控制台：`http://localhost:9001`
+- Milvus：`localhost:19530`
+- Attu：`http://localhost:8000`
+
+后端默认配置：
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/enterprise_kb?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: enterprise_kb
+    password: enterprise_kb123456
+
+app:
+  storage:
+    minio:
+      endpoint: http://localhost:9000
+      bucket: enterprise-kb-files
+      access-key: minioadmin
+      secret-key: minioadmin123
+  vector:
+    milvus:
+      host: localhost
+      port: 19530
+      database: default
+      collection-prefix: enterprise_kb
+```
+
 ## 手工验证清单
 
 1. 打开前端页面。
