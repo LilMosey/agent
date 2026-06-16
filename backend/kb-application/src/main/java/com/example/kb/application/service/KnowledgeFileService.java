@@ -6,10 +6,12 @@ import com.example.kb.application.port.VectorIndexCleaner;
 import com.example.kb.domain.model.FileStatus;
 import com.example.kb.domain.model.FileType;
 import com.example.kb.domain.model.KnowledgeFile;
+import com.example.kb.domain.service.FileSignaturePolicy;
 import com.example.kb.domain.service.FileTypePolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -23,6 +25,7 @@ public class KnowledgeFileService {
     private final VectorIndexCleaner vectorIndexCleaner;
     private final KnowledgeFileIndexTaskService indexTaskService;
     private final FileTypePolicy fileTypePolicy = new FileTypePolicy();
+    private final FileSignaturePolicy fileSignaturePolicy = new FileSignaturePolicy();
 
     public KnowledgeFileService(
             KnowledgeFileRepository fileRepository,
@@ -47,12 +50,22 @@ public class KnowledgeFileService {
 
         FileType fileType = fileTypePolicy.detect(filename);
         log.info("上传文件分支: 文件类型识别成功, filename={}, fileType={}", filename, fileType);
+        byte[] content;
+        try {
+            content = inputStream.readAllBytes();
+            log.info("上传文件分支: 文件字节读取成功, filename={}, byteLength={}", filename, content.length);
+        } catch (Exception exception) {
+            log.error("上传文件异常: 文件字节读取失败, filename={}", filename, exception);
+            throw new IllegalArgumentException("文件读取失败。", exception);
+        }
+        fileSignaturePolicy.validate(fileType, content);
+        log.info("上传文件分支: 文件签名校验通过, filename={}, fileType={}", filename, fileType);
         ObjectStorage.PutObjectCommand command = new ObjectStorage.PutObjectCommand(
                 knowledgeBaseId,
                 filename,
                 contentType,
-                inputStream,
-                size
+                new ByteArrayInputStream(content),
+                content.length
         );
         ObjectStorage.StoredObject storedObject = objectStorage.putObject(command);
         log.info("上传文件分支: 对象存储写入成功, bucket={}, objectKey={}, checksum={}", storedObject.bucket(), storedObject.objectKey(), storedObject.checksumSha256());
@@ -63,7 +76,7 @@ public class KnowledgeFileService {
                 filename,
                 fileTypePolicy.extensionOf(filename),
                 contentType,
-                size,
+                content.length,
                 storedObject.checksumSha256(),
                 storedObject.bucket(),
                 storedObject.objectKey(),

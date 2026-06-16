@@ -18,16 +18,16 @@ import java.io.InputStream;
 import java.time.LocalDateTime;
 
 @Component
-public class NoopIndexPipeline implements IndexPipeline {
+public class DocumentIndexPipeline implements IndexPipeline {
 
-    private static final Logger log = LoggerFactory.getLogger(NoopIndexPipeline.class);
+    private static final Logger log = LoggerFactory.getLogger(DocumentIndexPipeline.class);
     private static final int MAX_ERROR_MESSAGE_LENGTH = 1024;
 
     private final KnowledgeFileRepository fileRepository;
     private final ObjectStorage objectStorage;
     private final DocumentParserRegistry parserRegistry;
 
-    public NoopIndexPipeline(
+    public DocumentIndexPipeline(
             KnowledgeFileRepository fileRepository,
             ObjectStorage objectStorage,
             DocumentParserRegistry parserRegistry
