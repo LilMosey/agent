@@ -17,7 +17,7 @@ import type { FileStatus, KnowledgeBase, KnowledgeBasePayload, KnowledgeFile } f
 
 const { Header, Sider, Content } = Layout;
 
-const allowedExtensions = ['doc', 'docx', 'md', 'markdown', 'txt'];
+const allowedExtensions = ['docx', 'md', 'markdown', 'txt'];
 
 export function KnowledgeBaseLayout() {
   const [messageApi, contextHolder] = message.useMessage();
@@ -139,7 +139,7 @@ export function KnowledgeBaseLayout() {
       return;
     }
     if (!isAllowedFile(file.name)) {
-      messageApi.error(file.name.toLowerCase().endsWith('.pdf') ? '当前版本不支持上传 PDF 文件。' : '仅支持上传 Word、Markdown、TXT 文件。');
+      messageApi.error(toUnsupportedFileMessage(file.name));
       return;
     }
     try {
@@ -317,6 +317,17 @@ function isAllowedFile(filename: string): boolean {
   const segments = filename.toLowerCase().split('.');
   const extension = segments.length > 1 ? segments[segments.length - 1] : '';
   return allowedExtensions.includes(extension);
+}
+
+function toUnsupportedFileMessage(filename: string): string {
+  const lowerName = filename.toLowerCase();
+  if (lowerName.endsWith('.pdf')) {
+    return '当前版本不支持上传 PDF 文件。';
+  }
+  if (lowerName.endsWith('.doc')) {
+    return '当前版本仅支持 DOCX，不支持旧版 DOC 文件，请另存为 DOCX 后上传。';
+  }
+  return '仅支持上传 DOCX、Markdown、TXT 文件。';
 }
 
 function toErrorMessage(error: unknown): string {

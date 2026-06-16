@@ -9,11 +9,12 @@ public class FileTypePolicy {
     public FileType detect(String filename) {
         String ext = extensionOf(filename);
         return switch (ext) {
-            case "doc", "docx" -> FileType.WORD;
+            case "docx" -> FileType.WORD;
+            case "doc" -> throw new IllegalArgumentException("当前版本仅支持 DOCX，不支持旧版 DOC 文件，请另存为 DOCX 后上传。");
             case "md", "markdown" -> FileType.MARKDOWN;
             case "txt" -> FileType.TEXT;
             case "pdf" -> throw new IllegalArgumentException("当前版本不支持上传 PDF 文件。");
-            default -> throw new IllegalArgumentException("仅支持上传 Word、Markdown、TXT 文件。");
+            default -> throw new IllegalArgumentException("仅支持上传 DOCX、Markdown、TXT 文件。");
         };
     }
 

@@ -1,6 +1,7 @@
 package com.example.kb.infrastructure.persistence.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.kb.application.port.KnowledgeFileRepository;
 import com.example.kb.domain.model.FileStatus;
@@ -12,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -93,6 +95,30 @@ public class MybatisKnowledgeFileRepository implements KnowledgeFileRepository {
             log.warn("按 ID 查询文件元数据分支: 未命中, knowledgeBaseId={}, fileId={}", knowledgeBaseId, fileId);
         }
         return result;
+    }
+
+    @Override
+    public void updateParseStatus(Long knowledgeBaseId, Long fileId, FileStatus fileStatus, String parseError, LocalDateTime updatedAt) {
+        log.info("更新文件解析状态入参: knowledgeBaseId={}, fileId={}, fileStatus={}, hasParseError={}, updatedAt={}",
+                knowledgeBaseId, fileId, fileStatus, parseError != null && !parseError.isBlank(), updatedAt);
+        if (parseError == null || parseError.isBlank()) {
+            log.info("更新文件解析状态分支: 无解析错误, knowledgeBaseId={}, fileId={}", knowledgeBaseId, fileId);
+        } else {
+            log.warn("更新文件解析状态分支: 存在解析错误, knowledgeBaseId={}, fileId={}, parseError={}", knowledgeBaseId, fileId, parseError);
+        }
+        LambdaUpdateWrapper<KnowledgeFileEntity> wrapper = new LambdaUpdateWrapper<KnowledgeFileEntity>()
+                .eq(KnowledgeFileEntity::getKnowledgeBaseId, knowledgeBaseId)
+                .eq(KnowledgeFileEntity::getId, fileId)
+                .set(KnowledgeFileEntity::getFileStatus, fileStatus.name())
+                .set(KnowledgeFileEntity::getParseError, parseError)
+                .set(KnowledgeFileEntity::getUpdatedAt, updatedAt);
+        int updatedRows = knowledgeFileMapper.update(null, wrapper);
+        if (updatedRows > 0) {
+            log.info("更新文件解析状态分支: 更新成功, knowledgeBaseId={}, fileId={}, updatedRows={}", knowledgeBaseId, fileId, updatedRows);
+        } else {
+            log.warn("更新文件解析状态分支: 未更新, 文件可能不存在, knowledgeBaseId={}, fileId={}", knowledgeBaseId, fileId);
+        }
+        log.info("更新文件解析状态出参: knowledgeBaseId={}, fileId={}, updatedRows={}", knowledgeBaseId, fileId, updatedRows);
     }
 
     @Override
