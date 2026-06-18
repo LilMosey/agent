@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.kb.infrastructure.persistence.mapper.ChunkEnrichmentMapper">
+
+    <insert id="insertBatch" useGeneratedKeys="true" keyProperty="entities.id">
+        INSERT INTO knowledge_file_chunk_enrichment (
+            knowledge_base_id,
+            file_id,
+            chunk_id,
+            enrichment_strategy,
+            summary,
+            questions_json,
+            embedding_text_bucket,
+            embedding_text_object_key,
+            llm_provider,
+            llm_model,
+            prompt_version,
+            status,
+            error_message,
+            created_at,
+            updated_at
+        ) VALUES
+        <foreach collection="entities" item="entity" separator=",">
+            (
+                #{entity.knowledgeBaseId},
+                #{entity.fileId},
+                #{entity.chunkId},
+                #{entity.enrichmentStrategy},
+                #{entity.summary},
+                #{entity.questionsJson},
+                #{entity.embeddingTextBucket},
+                #{entity.embeddingTextObjectKey},
+                #{entity.llmProvider},
+                #{entity.llmModel},
+                #{entity.promptVersion},
+                #{entity.status},
+                #{entity.errorMessage},
+                #{entity.createdAt},
+                #{entity.updatedAt}
+            )
+        </foreach>
+    </insert>
+</mapper>
