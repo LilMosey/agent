@@ -18,6 +18,7 @@ import java.util.List;
 public class MybatisChunkEnrichmentRepository implements ChunkEnrichmentRepository {
 
     private static final Logger log = LoggerFactory.getLogger(MybatisChunkEnrichmentRepository.class);
+    private static final int BATCH_INSERT_SIZE = 100;
 
     private final ChunkEnrichmentMapper chunkEnrichmentMapper;
 
@@ -57,11 +58,19 @@ public class MybatisChunkEnrichmentRepository implements ChunkEnrichmentReposito
         for (ChunkEnrichment chunkEnrichment : chunkEnrichments) {
             entities.add(toEntity(chunkEnrichment));
         }
-        int insertedRows = chunkEnrichmentMapper.insertBatch(entities);
+        int insertedRows = 0;
+        int batchCount = 0;
+        for (int fromIndex = 0; fromIndex < entities.size(); fromIndex += BATCH_INSERT_SIZE) {
+            int toIndex = Math.min(fromIndex + BATCH_INSERT_SIZE, entities.size());
+            List<ChunkEnrichmentEntity> batchEntities = entities.subList(fromIndex, toIndex);
+            insertedRows += chunkEnrichmentMapper.insertBatch(batchEntities);
+            batchCount++;
+        }
         List<ChunkEnrichment> savedEnrichments = entities.stream()
                 .map(this::toDomain)
                 .toList();
-        log.info("批量保存 enrichment 元数据出参: insertedRows={}, count={}", insertedRows, savedEnrichments.size());
+        log.info("批量保存 enrichment 元数据出参: insertedRows={}, count={}, batchSize={}, batchCount={}",
+                insertedRows, savedEnrichments.size(), BATCH_INSERT_SIZE, batchCount);
         return savedEnrichments;
     }
 

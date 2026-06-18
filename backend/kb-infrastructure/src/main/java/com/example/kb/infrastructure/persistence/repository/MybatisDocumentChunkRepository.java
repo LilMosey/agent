@@ -17,6 +17,7 @@ import java.util.List;
 public class MybatisDocumentChunkRepository implements DocumentChunkRepository {
 
     private static final Logger log = LoggerFactory.getLogger(MybatisDocumentChunkRepository.class);
+    private static final int BATCH_INSERT_SIZE = 100;
 
     private final DocumentChunkMapper documentChunkMapper;
 
@@ -55,11 +56,19 @@ public class MybatisDocumentChunkRepository implements DocumentChunkRepository {
         for (DocumentChunk chunk : chunks) {
             entities.add(toEntity(chunk));
         }
-        int insertedRows = documentChunkMapper.insertBatch(entities);
+        int insertedRows = 0;
+        int batchCount = 0;
+        for (int fromIndex = 0; fromIndex < entities.size(); fromIndex += BATCH_INSERT_SIZE) {
+            int toIndex = Math.min(fromIndex + BATCH_INSERT_SIZE, entities.size());
+            List<DocumentChunkEntity> batchEntities = entities.subList(fromIndex, toIndex);
+            insertedRows += documentChunkMapper.insertBatch(batchEntities);
+            batchCount++;
+        }
         List<DocumentChunk> savedChunks = entities.stream()
                 .map(this::toDomain)
                 .toList();
-        log.info("批量保存 chunk 元数据出参: insertedRows={}, count={}", insertedRows, savedChunks.size());
+        log.info("批量保存 chunk 元数据出参: insertedRows={}, count={}, batchSize={}, batchCount={}",
+                insertedRows, savedChunks.size(), BATCH_INSERT_SIZE, batchCount);
         return savedChunks;
     }
 
