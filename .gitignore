@@ -19,6 +19,8 @@ logs/
 !.env.example
 application-local.yml
 application-local.yaml
+backend/kb-bootstrap/src/main/resources/application-test.yml
+backend/kb-bootstrap/src/main/resources/application-test.yaml
 
 # Java / Maven
 target/
@@ -45,4 +47,3 @@ temp/
 *.tmp
 *.swp
 *.swo
-

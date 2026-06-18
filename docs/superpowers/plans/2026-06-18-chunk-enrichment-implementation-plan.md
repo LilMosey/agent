@@ -500,11 +500,18 @@ rag:
     enabled: true
     provider: dashscope
     model: qwen-plus
-    api-key: ${DASHSCOPE_API_KEY:}
     max-questions: 3
     summary-max-chars: 200
     prompt-version: chunk_enrichment_v1
     mock-when-api-key-missing: true
+```
+
+API Key 不写入 `application.yml`。运行时通过环境变量提供，优先级如下：
+
+```text
+RAG_ENRICHMENT_API_KEY
+DEEPSEEK_API_KEY
+DASHSCOPE_API_KEY
 ```
 
 - [ ] **Step 2: 新增 ChunkEnrichmentProperties**
@@ -590,7 +597,7 @@ AgentScope 具体调用代码以 Task 1 确认的官方 API 为准。
 
 - [ ] **Step 6: 实现 MockChunkEnrichmentGenerator**
 
-仅当 `mock-when-api-key-missing=true` 且 API Key 为空时使用。
+仅当 `mock-when-api-key-missing=true` 且环境变量 API Key 为空时使用。
 
 规则：
 
@@ -747,7 +754,7 @@ DocumentIndexPipeline 仍然把文件更新为 READY。
 本地 shell 设置：
 
 ```bash
-export DASHSCOPE_API_KEY=你的Key
+export RAG_ENRICHMENT_API_KEY=你的Key
 ```
 
 - [ ] **Step 3: 用户编译后端**
