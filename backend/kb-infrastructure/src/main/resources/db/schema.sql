@@ -54,6 +54,29 @@ CREATE TABLE IF NOT EXISTS knowledge_file_chunk (
     KEY idx_chunk_strategy (chunk_strategy)
 );
 
+CREATE TABLE IF NOT EXISTS knowledge_file_chunk_enrichment (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    knowledge_base_id BIGINT NOT NULL,
+    file_id BIGINT NOT NULL,
+    chunk_id BIGINT NOT NULL,
+    enrichment_strategy VARCHAR(64) NOT NULL,
+    summary VARCHAR(1024) NULL,
+    questions_json JSON NULL,
+    embedding_text_bucket VARCHAR(255) NOT NULL,
+    embedding_text_object_key VARCHAR(1024) NOT NULL,
+    llm_provider VARCHAR(64) NULL,
+    llm_model VARCHAR(128) NULL,
+    prompt_version VARCHAR(64) NULL,
+    status VARCHAR(64) NOT NULL,
+    error_message VARCHAR(2048) NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    UNIQUE KEY uk_enrichment_chunk_strategy (chunk_id, enrichment_strategy),
+    KEY idx_enrichment_file_id (file_id),
+    KEY idx_enrichment_kb_file (knowledge_base_id, file_id),
+    KEY idx_enrichment_status (status)
+);
+
 CREATE TABLE IF NOT EXISTS knowledge_file_index_task (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     knowledge_base_id BIGINT NOT NULL,

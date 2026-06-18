@@ -34,3 +34,15 @@ app:
     scheduler:
       fixed-delay-ms: 5000
       batch-size: 10
+
+rag:
+  enrichment:
+    enabled: true
+    provider: dashscope
+    model: qwen-plus
+    api-key: ${DASHSCOPE_API_KEY:}
+    base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    max-questions: 3
+    summary-max-chars: 200
+    prompt-version: chunk_enrichment_v1
+    mock-when-api-key-missing: true

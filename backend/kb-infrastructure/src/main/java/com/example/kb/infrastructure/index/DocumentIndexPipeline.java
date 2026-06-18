@@ -12,6 +12,7 @@ import com.example.kb.domain.model.DocumentChunk;
 import com.example.kb.domain.model.KnowledgeFile;
 import com.example.kb.domain.model.KnowledgeFileIndexTask;
 import com.example.kb.domain.model.ParsedDocument;
+import com.example.kb.application.service.ChunkEnrichmentService;
 import com.example.kb.application.service.DocumentChunkService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,19 +33,22 @@ public class DocumentIndexPipeline implements IndexPipeline {
     private final DocumentParserRegistry parserRegistry;
     private final DocumentCleaner documentCleaner;
     private final DocumentChunkService documentChunkService;
+    private final ChunkEnrichmentService chunkEnrichmentService;
 
     public DocumentIndexPipeline(
             KnowledgeFileRepository fileRepository,
             ObjectStorage objectStorage,
             DocumentParserRegistry parserRegistry,
             DocumentCleaner documentCleaner,
-            DocumentChunkService documentChunkService
+            DocumentChunkService documentChunkService,
+            ChunkEnrichmentService chunkEnrichmentService
     ) {
         this.fileRepository = fileRepository;
         this.objectStorage = objectStorage;
         this.parserRegistry = parserRegistry;
         this.documentCleaner = documentCleaner;
         this.documentChunkService = documentChunkService;
+        this.chunkEnrichmentService = chunkEnrichmentService;
     }
 
     @Override
@@ -74,8 +78,9 @@ public class DocumentIndexPipeline implements IndexPipeline {
                 int sectionCount = cleanedDocument.sections().size();
                 List<DocumentChunk> chunks = documentChunkService.rebuildChunks(file, cleanedDocument);
                 int chunkCount = chunks.size();
+                chunkEnrichmentService.rebuildEnrichments(file, chunks);
                 fileRepository.updateParseStatus(file.knowledgeBaseId(), file.id(), FileStatus.READY, null, LocalDateTime.now());
-                String message = "文档解析、清洗和 chunk 成功，sectionCount=" + sectionCount + ", chunkCount=" + chunkCount;
+                String message = "文档解析、清洗、chunk 和 enrichment 处理完成，sectionCount=" + sectionCount + ", chunkCount=" + chunkCount;
                 log.info("索引 Pipeline 出参: taskId={}, fileId={}, title={}, sectionCount={}, chunkCount={}, status=SUCCESS",
                         task.id(), file.id(), cleanedDocument.title(), sectionCount, chunkCount);
                 return IndexPipeline.IndexPipelineResult.success(message);

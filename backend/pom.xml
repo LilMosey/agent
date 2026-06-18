@@ -23,6 +23,7 @@
         <mybatis-plus.version>3.5.12</mybatis-plus.version>
         <minio.version>8.5.17</minio.version>
         <poi.version>5.4.1</poi.version>
+        <agentscope.version>2.0.0-RC3</agentscope.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>

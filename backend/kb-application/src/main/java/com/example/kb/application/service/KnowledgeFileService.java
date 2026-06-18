@@ -1,5 +1,7 @@
 package com.example.kb.application.service;
 
+import com.example.kb.application.port.ChunkEnrichmentObjectStorage;
+import com.example.kb.application.port.ChunkEnrichmentRepository;
 import com.example.kb.application.port.ChunkObjectStorage;
 import com.example.kb.application.port.DocumentChunkRepository;
 import com.example.kb.application.port.KnowledgeFileRepository;
@@ -30,6 +32,8 @@ public class KnowledgeFileService {
     private final KnowledgeFileIndexTaskService indexTaskService;
     private final DocumentChunkRepository documentChunkRepository;
     private final ChunkObjectStorage chunkObjectStorage;
+    private final ChunkEnrichmentObjectStorage chunkEnrichmentObjectStorage;
+    private final ChunkEnrichmentRepository chunkEnrichmentRepository;
     private final FileTypePolicy fileTypePolicy = new FileTypePolicy();
     private final FileSignaturePolicy fileSignaturePolicy = new FileSignaturePolicy();
 
@@ -39,7 +43,9 @@ public class KnowledgeFileService {
             VectorIndexCleaner vectorIndexCleaner,
             KnowledgeFileIndexTaskService indexTaskService,
             DocumentChunkRepository documentChunkRepository,
-            ChunkObjectStorage chunkObjectStorage
+            ChunkObjectStorage chunkObjectStorage,
+            ChunkEnrichmentObjectStorage chunkEnrichmentObjectStorage,
+            ChunkEnrichmentRepository chunkEnrichmentRepository
     ) {
         this.fileRepository = fileRepository;
         this.objectStorage = objectStorage;
@@ -47,6 +53,8 @@ public class KnowledgeFileService {
         this.indexTaskService = indexTaskService;
         this.documentChunkRepository = documentChunkRepository;
         this.chunkObjectStorage = chunkObjectStorage;
+        this.chunkEnrichmentObjectStorage = chunkEnrichmentObjectStorage;
+        this.chunkEnrichmentRepository = chunkEnrichmentRepository;
     }
 
     public KnowledgeFile upload(
@@ -154,6 +162,10 @@ public class KnowledgeFileService {
         KnowledgeFile file = get(knowledgeBaseId, fileId);
         log.info("删除文件分支: 开始清理向量索引, fileId={}", fileId);
         vectorIndexCleaner.deleteByFileId(fileId);
+        log.info("删除文件分支: 开始删除 enrichment 增强文本, knowledgeBaseId={}, fileId={}", knowledgeBaseId, fileId);
+        chunkEnrichmentObjectStorage.deleteEnrichmentsByFile(knowledgeBaseId, fileId);
+        log.info("删除文件分支: 开始删除 enrichment 元数据, fileId={}", fileId);
+        chunkEnrichmentRepository.deleteByFileId(fileId);
         log.info("删除文件分支: 开始删除 chunk 正文, knowledgeBaseId={}, fileId={}", knowledgeBaseId, fileId);
         chunkObjectStorage.deleteChunksByFile(knowledgeBaseId, fileId);
         log.info("删除文件分支: 开始删除 chunk 元数据, fileId={}", fileId);
