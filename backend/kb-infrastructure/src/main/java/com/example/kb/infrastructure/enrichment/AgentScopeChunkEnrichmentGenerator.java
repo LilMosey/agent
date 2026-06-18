@@ -96,7 +96,8 @@ public class AgentScopeChunkEnrichmentGenerator implements ChunkEnrichmentGenera
                 if (contentBlock instanceof TextBlock textBlock) {
                     builder.append(textBlock.getText());
                 } else {
-                    builder.append(contentBlock);
+                    // thinkingBlock会有问题，应该过滤，这里得对接官方文档，这里指考虑textBlock
+//                    builder.append(contentBlock);
                 }
             }
         }
