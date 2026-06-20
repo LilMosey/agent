@@ -66,7 +66,7 @@ public class AgentScopeRagRouter implements RagRouter {
         } catch (Exception exception) {
             log.error("RAG Router 异常: questionLength={}, knowledgeBaseCount={}",
                     command.userQuestion().length(), command.knowledgeBases().size(), exception);
-            RouteResult fallback = fallbackSearchAll(command.knowledgeBases(), "Router 调用失败，降级查询全部启用知识库");
+            RouteResult fallback = fallbackNoKb("Router 调用失败，按普通聊天处理");
             log.warn("RAG Router 异常兜底出参: action={}, knowledgeBaseIds={}, reason={}",
                     fallback.action(), fallback.knowledgeBaseIds(), fallback.reason());
             return fallback;
@@ -80,15 +80,9 @@ public class AgentScopeRagRouter implements RagRouter {
         String reason = response.reason() == null || response.reason().isBlank() ? "Router 未返回原因" : response.reason().trim();
         List<Long> selectedIds = filterKnowledgeBaseIds(response.knowledgeBaseIds(), knowledgeBases);
         if (action == RagRouterAction.SEARCH_KB && selectedIds.isEmpty()) {
-            log.warn("RAG Router 分支: SEARCH_KB 但知识库为空，降级为全部知识库");
-            selectedIds = allKnowledgeBaseIds(knowledgeBases);
-        }
-        if (confidence.compareTo(properties.routerConfidenceThreshold()) < 0 && action != RagRouterAction.SEARCH_KB) {
-            log.warn("RAG Router 分支: 置信度低，保守改为 SEARCH_KB, confidence={}, threshold={}",
-                    confidence, properties.routerConfidenceThreshold());
-            action = RagRouterAction.SEARCH_KB;
-            selectedIds = allKnowledgeBaseIds(knowledgeBases);
-            reason = reason + "；置信度低，系统保守查询知识库";
+            log.warn("RAG Router 分支: SEARCH_KB 但未选出知识库，按普通聊天处理");
+            action = RagRouterAction.NO_KB;
+            reason = reason + "；未选出可查询知识库，系统按普通聊天处理";
         }
         if (action == RagRouterAction.NO_KB) {
             selectedIds = List.of();
@@ -100,8 +94,8 @@ public class AgentScopeRagRouter implements RagRouter {
         try {
             return RagRouterAction.valueOf(action);
         } catch (Exception exception) {
-            log.warn("RAG Router 分支: action 非法，降级 SEARCH_KB, action={}", action);
-            return RagRouterAction.SEARCH_KB;
+            log.warn("RAG Router 分支: action 非法，按普通聊天处理, action={}", action);
+            return RagRouterAction.NO_KB;
         }
     }
 
@@ -138,11 +132,11 @@ public class AgentScopeRagRouter implements RagRouter {
         return ids;
     }
 
-    private RouteResult fallbackSearchAll(List<KnowledgeBaseOption> knowledgeBases, String reason) {
+    private RouteResult fallbackNoKb(String reason) {
         return new RouteResult(
-                RagRouterAction.SEARCH_KB,
-                allKnowledgeBaseIds(knowledgeBases),
-                QueryIntent.FACT_QA,
+                RagRouterAction.NO_KB,
+                List.of(),
+                QueryIntent.CHAT,
                 BigDecimal.ZERO,
                 reason
         );

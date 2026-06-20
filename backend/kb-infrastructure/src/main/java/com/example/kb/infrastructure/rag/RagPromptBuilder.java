@@ -29,7 +29,7 @@ public class RagPromptBuilder {
                 如果问题是企业制度、文档内容、知识库事实问答，选择 SEARCH_KB。
                 如果问题是普通聊天、通用润色、翻译、格式转换，选择 NO_KB。
                 如果问题是“总结一下”“换成表格”“刚才依据是什么”等复用上一轮内容的请求，可以选择 REUSE_LAST_CONTEXT。
-                如果不确定，选择 SEARCH_KB。
+                如果无法确定应该查询哪个知识库，选择 NO_KB，不要选择全部知识库。
                 必须只返回 JSON，不要输出 Markdown，不要输出解释。
 
                 JSON 格式：
@@ -66,7 +66,7 @@ public class RagPromptBuilder {
         }
         StringBuilder referenceBuilder = new StringBuilder();
         for (RagAnswerGenerator.ReferenceContext reference : references) {
-            referenceBuilder.append("[引用 ")
+            referenceBuilder.append("[上下文 ")
                     .append(reference.referenceNo())
                     .append("]\n文件：")
                     .append(reference.fileName())
@@ -84,7 +84,7 @@ public class RagPromptBuilder {
                 如果引用内容无法回答，请说“知识库中没有找到明确依据”。
                 不要使用外部知识补充企业制度事实。
                 不要编造制度、金额、日期、流程或审批规则。
-                回答中可以用“引用 1”“引用 2”标注依据。
+                引用内容只是你的上下文材料，回答要自然，不要在正文中提到引用编号、上下文编号或资料编号。
                 如果多个引用存在冲突，请说明存在不一致，不要自行合并成确定结论。
 
                 【引用内容】

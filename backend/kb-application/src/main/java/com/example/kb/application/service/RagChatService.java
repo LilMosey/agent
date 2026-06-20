@@ -35,8 +35,6 @@ import java.util.Optional;
 public class RagChatService {
 
     private static final Logger log = LoggerFactory.getLogger(RagChatService.class);
-    private static final String NO_CONTEXT_ANSWER = "知识库中没有找到与该问题相关的内容。";
-
     private final ConversationRepository conversationRepository;
     private final ConversationMessageRepository conversationMessageRepository;
     private final ConversationRetrievalRepository conversationRetrievalRepository;
@@ -101,8 +99,8 @@ public class RagChatService {
                     conversationId, normalizedRouteResult.knowledgeBaseIds());
             referenceCandidates = searchReferences(content, normalizedRouteResult.knowledgeBaseIds());
             if (referenceCandidates.isEmpty()) {
-                log.warn("发送 RAG 会话消息分支: 未检索到引用, conversationId={}", conversationId);
-                answerContent = NO_CONTEXT_ANSWER;
+                log.warn("发送 RAG 会话消息分支: 未检索到引用，按普通聊天处理, conversationId={}", conversationId);
+                answerContent = generateAnswer(content, List.of());
             } else {
                 answerContent = generateAnswer(content, toReferenceContexts(referenceCandidates));
             }
@@ -147,6 +145,16 @@ public class RagChatService {
 
     private RagRouter.RouteResult normalizeRouteResult(RagRouter.RouteResult routeResult) {
         if (routeResult.action() == RagRouterAction.REUSE_LAST_CONTEXT) {
+            if (routeResult.knowledgeBaseIds().isEmpty()) {
+                log.info("RAG Router 结果归一化分支: REUSE_LAST_CONTEXT 无知识库，按普通聊天处理");
+                return new RagRouter.RouteResult(
+                        RagRouterAction.NO_KB,
+                        List.of(),
+                        routeResult.queryIntent(),
+                        routeResult.confidence(),
+                        routeResult.reason() + "；本期不复用上一轮上下文，且未选出知识库，按普通聊天处理"
+                );
+            }
             log.info("RAG Router 结果归一化分支: REUSE_LAST_CONTEXT 降级 SEARCH_KB");
             return new RagRouter.RouteResult(
                     RagRouterAction.SEARCH_KB,
@@ -154,6 +162,16 @@ public class RagChatService {
                     routeResult.queryIntent(),
                     routeResult.confidence(),
                     routeResult.reason() + "；本期不复用上一轮上下文，已降级重新检索"
+                );
+        }
+        if (routeResult.action() == RagRouterAction.SEARCH_KB && routeResult.knowledgeBaseIds().isEmpty()) {
+            log.info("RAG Router 结果归一化分支: SEARCH_KB 无知识库，按普通聊天处理");
+            return new RagRouter.RouteResult(
+                    RagRouterAction.NO_KB,
+                    List.of(),
+                    routeResult.queryIntent(),
+                    routeResult.confidence(),
+                    routeResult.reason() + "；未选出知识库，按普通聊天处理"
             );
         }
         return routeResult;
