@@ -24,7 +24,7 @@ export function ChatInput({ sending, onSend }: ChatInputProps) {
       <Input.TextArea
         value={content}
         onChange={(event) => setContent(event.target.value)}
-        placeholder="输入问题，系统会自动判断是否查询知识库"
+        placeholder="输入问题，Shift + Enter 换行"
         autoSize={{ minRows: 2, maxRows: 5 }}
         disabled={sending}
         onPressEnter={(event) => {

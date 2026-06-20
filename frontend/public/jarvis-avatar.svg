@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="JARVIS style assistant avatar">
+  <defs>
+    <linearGradient id="bg" x1="18" y1="12" x2="78" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#12243A"/>
+      <stop offset="1" stop-color="#0F8F7B"/>
+    </linearGradient>
+    <linearGradient id="core" x1="32" y1="24" x2="64" y2="72" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DFF8FF"/>
+      <stop offset="1" stop-color="#6FE7D6"/>
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="28" fill="url(#bg)"/>
+  <circle cx="48" cy="48" r="24" fill="none" stroke="#BDF7EF" stroke-width="3" opacity=".9"/>
+  <circle cx="48" cy="48" r="14" fill="none" stroke="url(#core)" stroke-width="5"/>
+  <path d="M48 23v10M48 63v10M23 48h10M63 48h10" stroke="#E8FFFB" stroke-width="3" stroke-linecap="round" opacity=".85"/>
+  <path d="M40 39h16v4h-5v17h-6V43h-5v-4Z" fill="#F4FFFD"/>
+  <circle cx="48" cy="48" r="34" fill="none" stroke="#FFFFFF" stroke-opacity=".18" stroke-width="1"/>
+</svg>

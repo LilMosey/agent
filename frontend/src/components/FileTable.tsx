@@ -1,4 +1,4 @@
-import { Button, Popconfirm, Space, Table, Tag } from 'antd';
+import { Button, Popconfirm, Space, Table, Tag, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { Download, Info, Trash2 } from 'lucide-react';
@@ -18,7 +18,13 @@ export function FileTable({ files, loading, onDetail, onDownload, onDelete }: Fi
     {
       title: '文件名',
       dataIndex: 'originalFilename',
-      ellipsis: true
+      width: 320,
+      ellipsis: true,
+      render: (filename: string) => (
+        <Tooltip title={filename} placement="topLeft">
+          <span className="file-name-cell">{filename}</span>
+        </Tooltip>
+      )
     },
     {
       title: '类型',
@@ -88,7 +94,7 @@ export function FileTable({ files, loading, onDetail, onDownload, onDelete }: Fi
       dataSource={files}
       loading={loading}
       pagination={false}
-      scroll={{ x: 1120 }}
+      scroll={{ x: 1360 }}
       locale={{ emptyText: '暂无文件' }}
     />
   );

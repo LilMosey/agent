@@ -1,4 +1,4 @@
-import { Button, Empty, Input, InputNumber, Layout, List, message, Modal, Popconfirm, Select, Space, Typography, Upload } from 'antd';
+import { Button, Empty, Input, InputNumber, Layout, List, message, Modal, Popconfirm, Select, Space, Tooltip, Typography, Upload } from 'antd';
 import type { UploadFile, UploadProps } from 'antd';
 import { Edit3, Plus, Search, Trash2, UploadCloud, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -262,51 +262,65 @@ export function KnowledgeBaseLayout() {
           loading={knowledgeBaseLoading}
           dataSource={knowledgeBases}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无知识库" /> }}
-          renderItem={(knowledgeBase) => (
-            <List.Item
-              className={knowledgeBase.id === selectedKnowledgeBaseId ? 'kb-item kb-item-active' : 'kb-item'}
-              onClick={() => setSelectedKnowledgeBaseId(knowledgeBase.id)}
-              actions={[
-                <Button
-                  key="edit"
-                  type="text"
-                  icon={<Edit3 size={15} />}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setEditingKnowledgeBase(knowledgeBase);
-                    setModalOpen(true);
-                  }}
-                />,
-                <Popconfirm
-                  key="delete-confirm"
-                  title="删除知识库"
-                  description={`确认删除“${knowledgeBase.name}”？`}
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true }}
-                  onConfirm={(event) => {
-                    event?.stopPropagation();
-                    void confirmDeleteKnowledgeBase(knowledgeBase);
-                  }}
-                  onCancel={(event) => event?.stopPropagation()}
-                >
+          renderItem={(knowledgeBase) => {
+            const description = knowledgeBase.description || '无描述';
+            return (
+              <List.Item
+                className={knowledgeBase.id === selectedKnowledgeBaseId ? 'kb-item kb-item-active' : 'kb-item'}
+                onClick={() => setSelectedKnowledgeBaseId(knowledgeBase.id)}
+                actions={[
                   <Button
-                    danger
+                    key="edit"
                     type="text"
-                    icon={<Trash2 size={15} />}
-                    onClick={(event) => event.stopPropagation()}
-                  />
-                </Popconfirm>
-              ]}
-            >
-              <List.Item.Meta title={knowledgeBase.name} description={knowledgeBase.description || '无描述'} />
-            </List.Item>
-          )}
+                    icon={<Edit3 size={15} />}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEditingKnowledgeBase(knowledgeBase);
+                      setModalOpen(true);
+                    }}
+                  />,
+                  <Popconfirm
+                    key="delete-confirm"
+                    title="删除知识库"
+                    description={`确认删除“${knowledgeBase.name}”？`}
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={(event) => {
+                      event?.stopPropagation();
+                      void confirmDeleteKnowledgeBase(knowledgeBase);
+                    }}
+                    onCancel={(event) => event?.stopPropagation()}
+                  >
+                    <Button
+                      danger
+                      type="text"
+                      icon={<Trash2 size={15} />}
+                      onClick={(event) => event.stopPropagation()}
+                    />
+                  </Popconfirm>
+                ]}
+              >
+                <List.Item.Meta
+                  title={
+                    <Tooltip title={knowledgeBase.name} placement="right">
+                      <span className="kb-item-title">{knowledgeBase.name}</span>
+                    </Tooltip>
+                  }
+                  description={
+                    <Tooltip title={description} placement="right">
+                      <span className="kb-item-description">{description}</span>
+                    </Tooltip>
+                  }
+                />
+              </List.Item>
+            );
+          }}
         />
       </Sider>
       <Layout>
         <Header className="app-header">
-          <div>
+          <div className="app-header-title">
             <Typography.Title level={3}>{selectedKnowledgeBase?.name || '请选择知识库'}</Typography.Title>
             <Typography.Text type="secondary">{selectedKnowledgeBase?.description || '创建或选择知识库后管理文件'}</Typography.Text>
           </div>
@@ -324,6 +338,10 @@ export function KnowledgeBaseLayout() {
         <Content className="app-content">
           {selectedKnowledgeBase ? (
             <>
+              <div className="content-section-title">
+                <Typography.Title level={4}>文档索引</Typography.Title>
+                <Typography.Text type="secondary">{files.length} 个文件</Typography.Text>
+              </div>
               <div className="toolbar">
                 <Input
                   allowClear

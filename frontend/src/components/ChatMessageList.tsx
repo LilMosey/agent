@@ -31,6 +31,7 @@ export function ChatMessageList({ messages, loading, referencesByMessageId }: Ch
         const isUser = message.role === 'USER';
         return (
           <div className={`chat-message-row ${isUser ? 'chat-message-row-user' : 'chat-message-row-assistant'}`} key={message.id}>
+            {!isUser ? <img className="chat-assistant-avatar" src="/jarvis-avatar.svg" alt="" aria-hidden="true" /> : null}
             <div className={`chat-message-bubble ${isUser ? 'chat-message-bubble-user' : 'chat-message-bubble-assistant'}`}>
               <Typography.Paragraph className="chat-message-content">{message.content}</Typography.Paragraph>
               {!isUser ? <ReferenceList references={referencesByMessageId[message.id] || []} /> : null}

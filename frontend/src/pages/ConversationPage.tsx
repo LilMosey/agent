@@ -234,8 +234,10 @@ export function ConversationPage() {
       />
       <Content className="conversation-content">
         <div className="conversation-header">
-          <Typography.Title level={3}>RAG 查询</Typography.Title>
-          <Typography.Text type="secondary">自动选择知识库，基于引用内容回答</Typography.Text>
+          <div>
+            <Typography.Title level={3}>RAG 对话</Typography.Title>
+            <Typography.Text type="secondary">基于知识库内容回答问题</Typography.Text>
+          </div>
         </div>
         <ChatMessageList messages={messages} loading={messageLoading} referencesByMessageId={referencesByMessageId} />
         <ChatInput sending={sending} onSend={handleSend} />
