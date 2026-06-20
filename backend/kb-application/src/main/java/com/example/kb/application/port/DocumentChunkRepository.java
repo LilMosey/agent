@@ -13,4 +13,6 @@ public interface DocumentChunkRepository {
     List<DocumentChunk> saveBatch(List<DocumentChunk> chunks);
 
     List<DocumentChunk> findByFileId(Long fileId);
+
+    List<DocumentChunk> findByIds(List<Long> ids);
 }

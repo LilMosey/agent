@@ -60,3 +60,12 @@ rag:
     base-url: https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api/v1 #以下为华北2（北京）地域的配置，调用时请将WorkspaceId替换为真实的业务空间ID，各地域的配置不同。
     dimension: 1024
     batch-size: 10
+  query:
+    provider: deepseek
+    router-model: deepseek-v4-flash
+    answer-model: deepseek-v4-flash
+    api-key: yourKey
+    base-url: https://api.deepseek.com
+    router-confidence-threshold: 0.6
+    retrieval-top-k: 10
+    context-top-k: 5

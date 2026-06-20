@@ -9,4 +9,6 @@ import java.util.List;
 public interface DocumentChunkMapper extends BaseMapper<DocumentChunkEntity> {
 
     int insertBatch(@Param("entities") List<DocumentChunkEntity> entities);
+
+    List<DocumentChunkEntity> selectByIds(@Param("ids") List<Long> ids);
 }

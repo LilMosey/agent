@@ -99,6 +99,19 @@ public class MybatisKnowledgeFileRepository implements KnowledgeFileRepository {
     }
 
     @Override
+    public Optional<KnowledgeFile> findById(Long fileId) {
+        log.info("按文件 ID 查询文件元数据入参: fileId={}", fileId);
+        KnowledgeFileEntity entity = knowledgeFileMapper.selectById(fileId);
+        Optional<KnowledgeFile> result = Optional.ofNullable(entity).map(this::toDomain);
+        if (result.isPresent()) {
+            log.info("按文件 ID 查询文件元数据分支: 命中, fileId={}", fileId);
+        } else {
+            log.warn("按文件 ID 查询文件元数据分支: 未命中, fileId={}", fileId);
+        }
+        return result;
+    }
+
+    @Override
     public void updateParseStatus(Long knowledgeBaseId, Long fileId, FileStatus fileStatus, String parseError, LocalDateTime updatedAt) {
         log.info("更新文件解析状态入参: knowledgeBaseId={}, fileId={}, fileStatus={}, hasParseError={}, updatedAt={}",
                 knowledgeBaseId, fileId, fileStatus, parseError != null && !parseError.isBlank(), updatedAt);

@@ -1,6 +1,7 @@
 package com.example.kb.infrastructure.vector;
 
 import com.example.kb.application.port.VectorIndexCleaner;
+import com.example.kb.application.port.VectorIndexSearcher;
 import com.example.kb.application.port.VectorIndexWriter;
 import com.example.kb.infrastructure.embedding.EmbeddingProperties;
 import com.google.gson.JsonArray;
@@ -13,15 +14,21 @@ import io.milvus.v2.service.collection.request.CreateCollectionReq;
 import io.milvus.v2.service.collection.request.HasCollectionReq;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.InsertReq;
+import io.milvus.v2.service.vector.request.SearchReq;
+import io.milvus.v2.service.vector.request.data.BaseVector;
+import io.milvus.v2.service.vector.request.data.FloatVec;
+import io.milvus.v2.service.vector.response.SearchResp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Component
-public class MilvusVectorIndexStore implements VectorIndexWriter, VectorIndexCleaner {
+public class MilvusVectorIndexStore implements VectorIndexWriter, VectorIndexCleaner, VectorIndexSearcher {
 
     private static final Logger log = LoggerFactory.getLogger(MilvusVectorIndexStore.class);
     private static final int INSERT_BATCH_SIZE = 100;
@@ -83,6 +90,38 @@ public class MilvusVectorIndexStore implements VectorIndexWriter, VectorIndexCle
         log.info("删除向量索引出参: fileId={}, collection={}", fileId, milvusProperties.collectionName());
     }
 
+    @Override
+    public SearchResult search(SearchCommand command) {
+        log.info("Milvus 向量检索入参: knowledgeBaseIds={}, topK={}, vectorDimension={}",
+                command.knowledgeBaseIds(), command.topK(), command.queryVector().size());
+        if (command.knowledgeBaseIds().isEmpty()) {
+            log.info("Milvus 向量检索分支: knowledgeBaseIds 为空");
+            return new SearchResult(List.of());
+        }
+        if (!hasCollection()) {
+            log.warn("Milvus 向量检索分支: collection 不存在, collection={}", milvusProperties.collectionName());
+            return new SearchResult(List.of());
+        }
+        validateVectorDimension(command.queryVector());
+        String filter = buildKnowledgeBaseFilter(command.knowledgeBaseIds());
+        List<BaseVector> queryVectors = List.of(new FloatVec(command.queryVector()));
+        SearchReq searchReq = SearchReq.builder()
+                .databaseName(milvusProperties.database())
+                .collectionName(milvusProperties.collectionName())
+                .annsField(VECTOR_FIELD)
+                .metricType(IndexParam.MetricType.COSINE)
+                .topK(command.topK())
+                .filter(filter)
+                .data(queryVectors)
+                .outputFields(List.of("knowledge_base_id", "file_id", "chunk_id", "chunk_index"))
+                .build();
+        SearchResp searchResp = milvusClient.search(searchReq);
+        List<SearchHit> hits = convertSearchHits(searchResp);
+        log.info("Milvus 向量检索出参: knowledgeBaseIds={}, filter={}, hitCount={}",
+                command.knowledgeBaseIds(), filter, hits.size());
+        return new SearchResult(hits);
+    }
+
     private List<JsonObject> buildRows(UpsertChunksCommand command) {
         List<JsonObject> rows = new ArrayList<>(command.chunks().size());
         for (VectorChunk chunk : command.chunks()) {
@@ -100,15 +139,71 @@ public class MilvusVectorIndexStore implements VectorIndexWriter, VectorIndexCle
     }
 
     private JsonArray toJsonArray(List<Float> vector) {
-        if (vector.size() != embeddingProperties.dimension()) {
-            throw new IllegalStateException("Milvus 写入向量维度不匹配，期望="
-                    + embeddingProperties.dimension() + "，实际=" + vector.size());
-        }
+        validateVectorDimension(vector);
         JsonArray jsonArray = new JsonArray();
         for (Float value : vector) {
             jsonArray.add(value);
         }
         return jsonArray;
+    }
+
+    private void validateVectorDimension(List<Float> vector) {
+        if (vector.size() != embeddingProperties.dimension()) {
+            throw new IllegalStateException("Milvus 向量维度不匹配，期望="
+                    + embeddingProperties.dimension() + "，实际=" + vector.size());
+        }
+    }
+
+    private String buildKnowledgeBaseFilter(List<Long> knowledgeBaseIds) {
+        if (knowledgeBaseIds.size() == 1) {
+            return "knowledge_base_id == " + knowledgeBaseIds.get(0);
+        }
+        StringBuilder filterBuilder = new StringBuilder("knowledge_base_id in [");
+        for (int index = 0; index < knowledgeBaseIds.size(); index++) {
+            if (index > 0) {
+                filterBuilder.append(", ");
+            }
+            filterBuilder.append(knowledgeBaseIds.get(index));
+        }
+        filterBuilder.append("]");
+        return filterBuilder.toString();
+    }
+
+    private List<SearchHit> convertSearchHits(SearchResp searchResp) {
+        List<SearchHit> hits = new ArrayList<>();
+        List<List<SearchResp.SearchResult>> searchResults = searchResp.getSearchResults();
+        if (searchResults == null || searchResults.isEmpty()) {
+            log.info("Milvus 向量检索转换分支: searchResults 为空");
+            return hits;
+        }
+        for (List<SearchResp.SearchResult> resultGroup : searchResults) {
+            for (SearchResp.SearchResult result : resultGroup) {
+                Map<String, Object> entity = result.getEntity();
+                SearchHit hit = new SearchHit(
+                        toLong(entity.get("knowledge_base_id")),
+                        toLong(entity.get("file_id")),
+                        toLong(entity.get("chunk_id")),
+                        toInteger(entity.get("chunk_index")),
+                        BigDecimal.valueOf(result.getScore().doubleValue())
+                );
+                hits.add(hit);
+            }
+        }
+        return hits;
+    }
+
+    private Long toLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.valueOf(String.valueOf(value));
+    }
+
+    private Integer toInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.valueOf(String.valueOf(value));
     }
 
     private void ensureCollection() {

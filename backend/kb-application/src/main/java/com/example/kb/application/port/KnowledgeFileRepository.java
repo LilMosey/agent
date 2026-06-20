@@ -17,6 +17,8 @@ public interface KnowledgeFileRepository {
 
     Optional<KnowledgeFile> findByKnowledgeBaseIdAndFileId(Long knowledgeBaseId, Long fileId);
 
+    Optional<KnowledgeFile> findById(Long fileId);
+
     void updateParseStatus(Long knowledgeBaseId, Long fileId, FileStatus fileStatus, String parseError, LocalDateTime updatedAt);
 
     void deleteByKnowledgeBaseIdAndFileId(Long knowledgeBaseId, Long fileId);

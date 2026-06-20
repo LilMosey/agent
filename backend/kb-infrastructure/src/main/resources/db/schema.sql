@@ -92,3 +92,57 @@ CREATE TABLE IF NOT EXISTS knowledge_file_index_task (
     KEY idx_index_task_status (status),
     KEY idx_index_task_file_id (file_id)
 );
+
+CREATE TABLE IF NOT EXISTS conversation (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(255) NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    deleted_at DATETIME(6) NULL,
+    KEY idx_conversation_deleted_updated (deleted_at, updated_at)
+);
+
+CREATE TABLE IF NOT EXISTS conversation_message (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    conversation_id BIGINT NOT NULL,
+    role VARCHAR(64) NOT NULL,
+    content TEXT NOT NULL,
+    message_order INT NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    KEY idx_message_conversation_id (conversation_id),
+    KEY idx_message_conversation_order (conversation_id, message_order)
+);
+
+CREATE TABLE IF NOT EXISTS conversation_retrieval (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    conversation_id BIGINT NOT NULL,
+    message_id BIGINT NOT NULL,
+    query_text TEXT NOT NULL,
+    action VARCHAR(64) NOT NULL,
+    knowledge_base_ids_json JSON NULL,
+    query_intent VARCHAR(64) NOT NULL,
+    confidence DECIMAL(5, 4) NOT NULL DEFAULT 0,
+    reason VARCHAR(1024) NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    KEY idx_retrieval_conversation_id (conversation_id),
+    KEY idx_retrieval_message_id (message_id)
+);
+
+CREATE TABLE IF NOT EXISTS conversation_retrieval_reference (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    conversation_retrieval_id BIGINT NOT NULL,
+    knowledge_base_id BIGINT NOT NULL,
+    file_id BIGINT NOT NULL,
+    chunk_id BIGINT NOT NULL,
+    chunk_index INT NOT NULL,
+    title_path VARCHAR(1024) NULL,
+    score DECIMAL(10, 6) NOT NULL DEFAULT 0,
+    content_preview VARCHAR(512) NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    KEY idx_reference_retrieval_id (conversation_retrieval_id),
+    KEY idx_reference_chunk_id (chunk_id),
+    KEY idx_reference_file_id (file_id)
+);

@@ -85,6 +85,20 @@ public class MybatisDocumentChunkRepository implements DocumentChunkRepository {
         return chunks;
     }
 
+    @Override
+    public List<DocumentChunk> findByIds(List<Long> ids) {
+        log.info("按 ID 批量查询 chunk 元数据入参: ids={}", ids);
+        if (ids.isEmpty()) {
+            log.info("按 ID 批量查询 chunk 元数据分支: 空列表");
+            return List.of();
+        }
+        List<DocumentChunk> chunks = documentChunkMapper.selectByIds(ids).stream()
+                .map(this::toDomain)
+                .toList();
+        log.info("按 ID 批量查询 chunk 元数据出参: requestCount={}, resultCount={}", ids.size(), chunks.size());
+        return chunks;
+    }
+
     private DocumentChunk toDomain(DocumentChunkEntity entity) {
         return new DocumentChunk(
                 entity.getId(),
