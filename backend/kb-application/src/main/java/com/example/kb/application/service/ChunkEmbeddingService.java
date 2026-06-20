@@ -117,6 +117,7 @@ public class ChunkEmbeddingService {
                     chunk.chunkIndex(),
                     embeddingText.source(),
                     chunk.contentHash(),
+                    embeddingText.content(),
                     item.vector()
             ));
         }

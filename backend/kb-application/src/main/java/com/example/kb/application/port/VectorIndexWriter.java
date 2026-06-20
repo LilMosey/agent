@@ -18,6 +18,7 @@ public interface VectorIndexWriter {
             int chunkIndex,
             String embeddingSource,
             String contentHash,
+            String content,
             List<Float> vector
     ) {
     }

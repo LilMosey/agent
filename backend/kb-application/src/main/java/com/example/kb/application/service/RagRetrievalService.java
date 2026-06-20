@@ -4,6 +4,7 @@ import com.example.kb.application.port.ConversationRetrievalTaskHitRepository;
 import com.example.kb.application.port.ConversationRetrievalTaskRepository;
 import com.example.kb.application.port.EmbeddingGenerator;
 import com.example.kb.application.port.HydeGenerator;
+import com.example.kb.application.port.KeywordIndexSearcher;
 import com.example.kb.application.port.MultiQueryGenerator;
 import com.example.kb.application.port.QueryRewriteGenerator;
 import com.example.kb.application.port.VectorIndexSearcher;
@@ -31,6 +32,7 @@ public class RagRetrievalService {
     private final MultiQueryGenerator multiQueryGenerator;
     private final EmbeddingGenerator embeddingGenerator;
     private final VectorIndexSearcher vectorIndexSearcher;
+    private final KeywordIndexSearcher keywordIndexSearcher;
     private final ConversationRetrievalTaskRepository conversationRetrievalTaskRepository;
     private final ConversationRetrievalTaskHitRepository conversationRetrievalTaskHitRepository;
     private final RrfFusionService rrfFusionService;
@@ -43,6 +45,7 @@ public class RagRetrievalService {
             MultiQueryGenerator multiQueryGenerator,
             EmbeddingGenerator embeddingGenerator,
             VectorIndexSearcher vectorIndexSearcher,
+            KeywordIndexSearcher keywordIndexSearcher,
             ConversationRetrievalTaskRepository conversationRetrievalTaskRepository,
             ConversationRetrievalTaskHitRepository conversationRetrievalTaskHitRepository,
             RrfFusionService rrfFusionService,
@@ -54,6 +57,7 @@ public class RagRetrievalService {
         this.multiQueryGenerator = multiQueryGenerator;
         this.embeddingGenerator = embeddingGenerator;
         this.vectorIndexSearcher = vectorIndexSearcher;
+        this.keywordIndexSearcher = keywordIndexSearcher;
         this.conversationRetrievalTaskRepository = conversationRetrievalTaskRepository;
         this.conversationRetrievalTaskHitRepository = conversationRetrievalTaskHitRepository;
         this.rrfFusionService = rrfFusionService;
@@ -73,6 +77,15 @@ public class RagRetrievalService {
         for (RetrievalTaskDraft taskDraft : taskDrafts) {
             if (taskDraft.status() == RetrievalTaskStatus.SKIPPED) {
                 futures.add(CompletableFuture.completedFuture(RetrievalTaskReport.skipped(taskDraft)));
+            } else if (taskDraft.status() == RetrievalTaskStatus.FAILED) {
+                futures.add(CompletableFuture.completedFuture(
+                        RetrievalTaskReport.failed(taskDraft, LocalDateTime.now(), LocalDateTime.now())
+                ));
+            } else if (taskDraft.taskType() == RetrievalTaskType.BM25) {
+                futures.add(CompletableFuture.supplyAsync(
+                        () -> executeBm25Task(taskDraft, command.knowledgeBaseIds()),
+                        retrievalExecutorService
+                ));
             } else {
                 futures.add(CompletableFuture.supplyAsync(
                         () -> executeDenseTask(taskDraft, command.knowledgeBaseIds()),
@@ -157,10 +170,9 @@ public class RagRetrievalService {
             addMultiQueryTasks(command, drafts);
         }
         if (properties.isBm25Enabled()) {
-            drafts.add(RetrievalTaskDraft.skipped(
+            drafts.add(RetrievalTaskDraft.running(
                     RetrievalTaskType.BM25,
-                    command.userQuestion(),
-                    "BM25 阶段 B 接入，本阶段跳过"
+                    command.userQuestion()
             ));
         }
         log.info("构建检索任务出参: count={}", drafts.size());
@@ -270,6 +282,41 @@ public class RagRetrievalService {
             return report;
         } catch (Exception exception) {
             log.error("执行 Dense 检索任务异常: taskType={}, queryLength={}",
+                    taskDraft.taskType(), taskDraft.queryText().length(), exception);
+            return RetrievalTaskReport.failed(
+                    RetrievalTaskDraft.failed(taskDraft.taskType(), taskDraft.queryText(), exception.getMessage()),
+                    startedAt,
+                    LocalDateTime.now()
+            );
+        }
+    }
+
+    private RetrievalTaskReport executeBm25Task(RetrievalTaskDraft taskDraft, List<Long> knowledgeBaseIds) {
+        LocalDateTime startedAt = LocalDateTime.now();
+        log.info("执行 BM25 检索任务入参: taskType={}, queryLength={}, knowledgeBaseIds={}",
+                taskDraft.taskType(), taskDraft.queryText().length(), knowledgeBaseIds);
+        try {
+            KeywordIndexSearcher.KeywordSearchResult searchResult = keywordIndexSearcher.search(
+                    new KeywordIndexSearcher.KeywordSearchCommand(
+                            knowledgeBaseIds,
+                            taskDraft.queryText(),
+                            properties.safeBm25TopK()
+                    )
+            );
+            List<VectorIndexSearcher.SearchHit> hits = searchResult.hits().stream()
+                    .map(KeywordIndexSearcher.KeywordSearchHit::toVectorSearchHit)
+                    .toList();
+            RetrievalTaskReport report = RetrievalTaskReport.success(
+                    taskDraft,
+                    hits,
+                    startedAt,
+                    LocalDateTime.now()
+            );
+            log.info("执行 BM25 检索任务出参: taskType={}, hitCount={}",
+                    report.taskType(), report.hits().size());
+            return report;
+        } catch (Exception exception) {
+            log.error("执行 BM25 检索任务异常: taskType={}, queryLength={}",
                     taskDraft.taskType(), taskDraft.queryText().length(), exception);
             return RetrievalTaskReport.failed(
                     RetrievalTaskDraft.failed(taskDraft.taskType(), taskDraft.queryText(), exception.getMessage()),

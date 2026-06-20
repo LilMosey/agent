@@ -16,6 +16,7 @@ import com.example.kb.application.port.DocumentChunker;
 import com.example.kb.application.port.EmbeddingGenerator;
 import com.example.kb.application.port.HydeGenerator;
 import com.example.kb.application.port.IndexPipeline;
+import com.example.kb.application.port.KeywordIndexSearcher;
 import com.example.kb.application.port.KnowledgeBaseRepository;
 import com.example.kb.application.port.KnowledgeFileRepository;
 import com.example.kb.application.port.KnowledgeFileIndexTaskRepository;
@@ -276,6 +277,7 @@ public class ApplicationServiceConfiguration {
             MultiQueryGenerator multiQueryGenerator,
             EmbeddingGenerator embeddingGenerator,
             VectorIndexSearcher vectorIndexSearcher,
+            KeywordIndexSearcher keywordIndexSearcher,
             ConversationRetrievalTaskRepository conversationRetrievalTaskRepository,
             ConversationRetrievalTaskHitRepository conversationRetrievalTaskHitRepository,
             RrfFusionService rrfFusionService,
@@ -288,6 +290,7 @@ public class ApplicationServiceConfiguration {
                 multiQueryGenerator,
                 embeddingGenerator,
                 vectorIndexSearcher,
+                keywordIndexSearcher,
                 conversationRetrievalTaskRepository,
                 conversationRetrievalTaskHitRepository,
                 rrfFusionService,

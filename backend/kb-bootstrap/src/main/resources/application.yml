@@ -33,6 +33,8 @@ app:
       port: 19530
       database: default
       collection-prefix: enterprise_kb
+      collection-name: enterprise_kb_chunk
+      bm25-enabled: false
   index:
     scheduler:
       fixed-delay-ms: 5000

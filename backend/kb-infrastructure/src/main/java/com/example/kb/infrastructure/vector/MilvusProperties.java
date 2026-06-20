@@ -7,7 +7,9 @@ public record MilvusProperties(
         String host,
         int port,
         String database,
-        String collectionPrefix
+        String collectionPrefix,
+        String collectionName,
+        Boolean bm25Enabled
 ) {
 
     public String uri() {
@@ -15,6 +17,13 @@ public record MilvusProperties(
     }
 
     public String collectionName() {
+        if (collectionName != null && !collectionName.isBlank()) {
+            return collectionName;
+        }
         return collectionPrefix + "_chunk";
+    }
+
+    public boolean isBm25Enabled() {
+        return bm25Enabled != null && bm25Enabled;
     }
 }
