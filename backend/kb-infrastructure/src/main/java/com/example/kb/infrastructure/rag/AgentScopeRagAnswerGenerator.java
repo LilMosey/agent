@@ -38,7 +38,11 @@ public class AgentScopeRagAnswerGenerator implements RagAnswerGenerator {
         log.info("RAG 回答生成入参: questionLength={}, referenceCount={}, provider={}, model={}",
                 command.userQuestion().length(), command.references().size(), properties.provider(), properties.answerModel());
         try {
-            String prompt = promptBuilder.buildAnswerPrompt(command.userQuestion(), command.references());
+            String prompt = promptBuilder.buildAnswerPrompt(
+                    command.userQuestion(),
+                    command.references(),
+                    command.recentMessages()
+            );
             String responseText = callModel(prompt);
             log.info("RAG 回答生成出参: answerLength={}, referenceCount={}",
                     responseText.length(), command.references().size());
@@ -55,7 +59,11 @@ public class AgentScopeRagAnswerGenerator implements RagAnswerGenerator {
         log.info("RAG 流式回答生成入参: questionLength={}, referenceCount={}, provider={}, model={}",
                 command.userQuestion().length(), command.references().size(), properties.provider(), properties.answerModel());
         try {
-            String prompt = promptBuilder.buildAnswerPrompt(command.userQuestion(), command.references());
+            String prompt = promptBuilder.buildAnswerPrompt(
+                    command.userQuestion(),
+                    command.references(),
+                    command.recentMessages()
+            );
             String responseText = callModelStream(prompt, answerDeltaConsumer);
             log.info("RAG 流式回答生成出参: answerLength={}, referenceCount={}",
                     responseText.length(), command.references().size());

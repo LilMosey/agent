@@ -3,4 +3,17 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.kb.infrastructure.persistence.mapper.ConversationRetrievalMapper">
+    <select id="selectLatestWithReferencesByConversationId"
+            resultType="com.example.kb.infrastructure.persistence.entity.ConversationRetrievalEntity">
+        SELECT r.*
+        FROM conversation_retrieval r
+        WHERE r.conversation_id = #{conversationId}
+          AND EXISTS (
+              SELECT 1
+              FROM conversation_retrieval_reference ref
+              WHERE ref.conversation_retrieval_id = r.id
+          )
+        ORDER BY r.id DESC
+        LIMIT 1
+    </select>
 </mapper>

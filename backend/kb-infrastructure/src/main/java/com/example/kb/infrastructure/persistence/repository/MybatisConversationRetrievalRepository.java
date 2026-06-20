@@ -14,6 +14,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class MybatisConversationRetrievalRepository implements ConversationRetrievalRepository {
@@ -46,6 +47,20 @@ public class MybatisConversationRetrievalRepository implements ConversationRetri
         log.info("保存检索记录出参: id={}, conversationId={}, messageId={}",
                 saved.id(), saved.conversationId(), saved.messageId());
         return saved;
+    }
+
+    @Override
+    public Optional<ConversationRetrieval> findLatestWithReferencesByConversationId(Long conversationId) {
+        log.info("查询最近有引用的检索记录入参: conversationId={}", conversationId);
+        ConversationRetrievalEntity entity = conversationRetrievalMapper.selectLatestWithReferencesByConversationId(conversationId);
+        if (entity == null) {
+            log.info("查询最近有引用的检索记录出参: conversationId={}, found=false", conversationId);
+            return Optional.empty();
+        }
+        ConversationRetrieval retrieval = toDomain(entity);
+        log.info("查询最近有引用的检索记录出参: conversationId={}, retrievalId={}",
+                conversationId, retrieval.id());
+        return Optional.of(retrieval);
     }
 
     private ConversationRetrieval toDomain(ConversationRetrievalEntity entity) {

@@ -36,6 +36,8 @@ import com.example.kb.application.service.DocumentChunkService;
 import com.example.kb.application.service.KnowledgeFileIndexTaskService;
 import com.example.kb.application.service.KnowledgeFileService;
 import com.example.kb.application.service.RagChatService;
+import com.example.kb.application.service.RagConversationContextService;
+import com.example.kb.application.service.RagContextProperties;
 import com.example.kb.application.service.RagRetrievalProperties;
 import com.example.kb.application.service.RagRetrievalService;
 import com.example.kb.application.service.RrfFusionService;
@@ -87,6 +89,14 @@ public class ApplicationServiceConfiguration {
                 environment.getProperty("rag.retrieval.executor-core-size", Integer.class),
                 environment.getProperty("rag.retrieval.executor-max-size", Integer.class),
                 environment.getProperty("rag.retrieval.executor-queue-capacity", Integer.class)
+        );
+    }
+
+    @Bean
+    public RagContextProperties ragContextProperties(Environment environment) {
+        return new RagContextProperties(
+                environment.getProperty("rag.context.recent-message-limit", Integer.class),
+                environment.getProperty("rag.context.reuse-last-context-enabled", Boolean.class)
         );
     }
 
@@ -321,6 +331,27 @@ public class ApplicationServiceConfiguration {
     }
 
     @Bean
+    public RagConversationContextService ragConversationContextService(
+            ConversationMessageRepository conversationMessageRepository,
+            ConversationRetrievalRepository conversationRetrievalRepository,
+            ConversationRetrievalReferenceRepository conversationRetrievalReferenceRepository,
+            DocumentChunkRepository documentChunkRepository,
+            KnowledgeFileRepository knowledgeFileRepository,
+            ChunkContentStorage chunkContentStorage,
+            RagContextProperties ragContextProperties
+    ) {
+        return new RagConversationContextService(
+                conversationMessageRepository,
+                conversationRetrievalRepository,
+                conversationRetrievalReferenceRepository,
+                documentChunkRepository,
+                knowledgeFileRepository,
+                chunkContentStorage,
+                ragContextProperties
+        );
+    }
+
+    @Bean
     public RagChatService ragChatService(
             ConversationRepository conversationRepository,
             ConversationMessageRepository conversationMessageRepository,
@@ -332,6 +363,7 @@ public class ApplicationServiceConfiguration {
             ChunkContentStorage chunkContentStorage,
             RagRouter ragRouter,
             RagRetrievalService ragRetrievalService,
+            RagConversationContextService ragConversationContextService,
             RagAnswerGenerator ragAnswerGenerator,
             RagRetrievalProperties ragRetrievalProperties
     ) {
@@ -346,6 +378,7 @@ public class ApplicationServiceConfiguration {
                 chunkContentStorage,
                 ragRouter,
                 ragRetrievalService,
+                ragConversationContextService,
                 ragAnswerGenerator,
                 ragRetrievalProperties.safeContextTopK()
         );

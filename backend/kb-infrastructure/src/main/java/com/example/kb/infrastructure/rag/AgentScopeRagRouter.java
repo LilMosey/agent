@@ -48,20 +48,29 @@ public class AgentScopeRagRouter implements RagRouter {
 
     @Override
     public RouteResult route(RouteCommand command) {
-        log.info("RAG Router 入参: questionLength={}, knowledgeBaseCount={}, provider={}, model={}",
-                command.userQuestion().length(), command.knowledgeBases().size(), properties.provider(), properties.routerModel());
+        log.info("RAG Router 入参: questionLength={}, knowledgeBaseCount={}, recentMessageCount={}, previousContextAvailable={}, provider={}, model={}",
+                command.userQuestion().length(), command.knowledgeBases().size(), command.recentMessages().size(),
+                command.previousRagContext() != null && Boolean.TRUE.equals(command.previousRagContext().available()),
+                properties.provider(), properties.routerModel());
         if (command.knowledgeBases().isEmpty()) {
             log.warn("RAG Router 分支: 无可用知识库，返回 NO_KB");
-            return new RouteResult(RagRouterAction.NO_KB, List.of(), QueryIntent.CHAT, BigDecimal.ZERO, "当前没有可用知识库");
+            return new RouteResult(RagRouterAction.NO_KB, List.of(), QueryIntent.CHAT, "",
+                    Boolean.FALSE, "NONE", BigDecimal.ZERO, "当前没有可用知识库");
         }
         try {
-            String prompt = promptBuilder.buildRouterPrompt(command.userQuestion(), command.knowledgeBases());
+            String prompt = promptBuilder.buildRouterPrompt(
+                    command.userQuestion(),
+                    command.knowledgeBases(),
+                    command.recentMessages(),
+                    command.previousRagContext()
+            );
             String responseText = callModel(prompt, properties.routerModel());
             LlmRouterResponse response = objectMapper.readValue(cleanJson(responseText), LlmRouterResponse.class);
-            RouteResult routeResult = normalize(response, command.knowledgeBases());
-            log.info("RAG Router 出参: action={}, knowledgeBaseIds={}, queryIntent={}, confidence={}, reason={}",
+            RouteResult routeResult = normalize(response, command);
+            log.info("RAG Router 出参: action={}, knowledgeBaseIds={}, queryIntent={}, searchQueryLength={}, reusePrevious={}, confidence={}, reason={}",
                     routeResult.action(), routeResult.knowledgeBaseIds(), routeResult.queryIntent(),
-                    routeResult.confidence(), routeResult.reason());
+                    routeResult.searchQuery() == null ? 0 : routeResult.searchQuery().length(),
+                    routeResult.reusePrevious(), routeResult.confidence(), routeResult.reason());
             return routeResult;
         } catch (Exception exception) {
             log.error("RAG Router 异常: questionLength={}, knowledgeBaseCount={}",
@@ -73,21 +82,60 @@ public class AgentScopeRagRouter implements RagRouter {
         }
     }
 
-    private RouteResult normalize(LlmRouterResponse response, List<KnowledgeBaseOption> knowledgeBases) {
+    private RouteResult normalize(LlmRouterResponse response, RouteCommand command) {
         RagRouterAction action = parseAction(response.action());
+        if (action == RagRouterAction.REUSE_LAST_CONTEXT) {
+            log.info("RAG Router 分支: 兼容旧动作 REUSE_LAST_CONTEXT，归一为 USE_PREVIOUS_CONTEXT");
+            action = RagRouterAction.USE_PREVIOUS_CONTEXT;
+        }
         QueryIntent queryIntent = parseQueryIntent(response.queryIntent());
         BigDecimal confidence = response.confidence() == null ? BigDecimal.ZERO : response.confidence();
         String reason = response.reason() == null || response.reason().isBlank() ? "Router 未返回原因" : response.reason().trim();
-        List<Long> selectedIds = filterKnowledgeBaseIds(response.knowledgeBaseIds(), knowledgeBases);
-        if (action == RagRouterAction.SEARCH_KB && selectedIds.isEmpty()) {
+        String searchQuery = response.searchQuery() == null ? "" : response.searchQuery().trim();
+        Boolean reusePrevious = response.reusePrevious();
+        String reusePolicy = response.reusePolicy() == null || response.reusePolicy().isBlank()
+                ? "NONE"
+                : response.reusePolicy().trim();
+        List<Long> selectedIds = filterKnowledgeBaseIds(response.knowledgeBaseIds(), command.knowledgeBases());
+        if ((action == RagRouterAction.SEARCH_KB || action == RagRouterAction.USE_PREVIOUS_AND_SEARCH)
+                && selectedIds.isEmpty()) {
             log.warn("RAG Router 分支: SEARCH_KB 但未选出知识库，按普通聊天处理");
-            action = RagRouterAction.NO_KB;
-            reason = reason + "；未选出可查询知识库，系统按普通聊天处理";
+            if (action == RagRouterAction.USE_PREVIOUS_AND_SEARCH
+                    && command.previousRagContext() != null
+                    && Boolean.TRUE.equals(command.previousRagContext().available())) {
+                action = RagRouterAction.USE_PREVIOUS_CONTEXT;
+                reusePrevious = Boolean.TRUE;
+                reusePolicy = "LAST_REFERENCES";
+                reason = reason + "；未选出可补查知识库，系统改为复用上一轮上下文";
+            } else {
+                action = RagRouterAction.NO_KB;
+                reusePrevious = Boolean.FALSE;
+                reusePolicy = "NONE";
+                reason = reason + "；未选出可查询知识库，系统按普通聊天处理";
+            }
         }
         if (action == RagRouterAction.NO_KB) {
             selectedIds = List.of();
+            reusePrevious = Boolean.FALSE;
+            reusePolicy = "NONE";
         }
-        return new RouteResult(action, selectedIds, queryIntent, confidence, reason);
+        if (action == RagRouterAction.SEARCH_KB && searchQuery.isBlank()) {
+            searchQuery = command.userQuestion();
+        }
+        if (action == RagRouterAction.USE_PREVIOUS_CONTEXT) {
+            selectedIds = List.of();
+            searchQuery = "";
+            reusePrevious = Boolean.TRUE;
+            reusePolicy = "LAST_REFERENCES";
+        }
+        if (action == RagRouterAction.USE_PREVIOUS_AND_SEARCH) {
+            if (searchQuery.isBlank()) {
+                searchQuery = command.userQuestion();
+            }
+            reusePrevious = Boolean.TRUE;
+            reusePolicy = "LAST_REFERENCES_PLUS_SEARCH";
+        }
+        return new RouteResult(action, selectedIds, queryIntent, searchQuery, reusePrevious, reusePolicy, confidence, reason);
     }
 
     private RagRouterAction parseAction(String action) {
@@ -137,6 +185,9 @@ public class AgentScopeRagRouter implements RagRouter {
                 RagRouterAction.NO_KB,
                 List.of(),
                 QueryIntent.CHAT,
+                "",
+                Boolean.FALSE,
+                "NONE",
                 BigDecimal.ZERO,
                 reason
         );
@@ -199,6 +250,9 @@ public class AgentScopeRagRouter implements RagRouter {
             String action,
             List<Long> knowledgeBaseIds,
             String queryIntent,
+            String searchQuery,
+            Boolean reusePrevious,
+            String reusePolicy,
             BigDecimal confidence,
             String reason
     ) {

@@ -73,6 +73,9 @@ rag:
     router-confidence-threshold: 0.6
     retrieval-top-k: 10
     context-top-k: 5
+  context:
+    recent-message-limit: 6
+    reuse-last-context-enabled: true
   retrieval:
     query-rewrite-enabled: true
     hyde-enabled: true

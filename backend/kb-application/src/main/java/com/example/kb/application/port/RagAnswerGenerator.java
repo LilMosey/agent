@@ -1,5 +1,7 @@
 package com.example.kb.application.port;
 
+import com.example.kb.domain.model.ConversationMessage;
+
 import java.util.List;
 
 public interface RagAnswerGenerator {
@@ -15,7 +17,8 @@ public interface RagAnswerGenerator {
 
     record AnswerCommand(
             String userQuestion,
-            List<ReferenceContext> references
+            List<ReferenceContext> references,
+            List<ConversationMessage> recentMessages
     ) {
     }
 

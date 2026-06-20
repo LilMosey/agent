@@ -95,6 +95,9 @@ public final class ConversationDtos {
             RagRouterAction action,
             List<Long> knowledgeBaseIds,
             QueryIntent queryIntent,
+            String searchQuery,
+            Boolean reusePrevious,
+            String reusePolicy,
             BigDecimal confidence,
             String reason
     ) {
@@ -103,6 +106,9 @@ public final class ConversationDtos {
                     result.action(),
                     result.knowledgeBaseIds(),
                     result.queryIntent(),
+                    result.searchQuery(),
+                    result.reusePrevious(),
+                    result.reusePolicy(),
                     result.confidence(),
                     result.reason()
             );
