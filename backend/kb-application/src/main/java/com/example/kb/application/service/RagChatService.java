@@ -51,6 +51,7 @@ public class RagChatService {
     private final RagRetrievalProperties ragRetrievalProperties;
     private final RagAnswerGenerator ragAnswerGenerator;
     private final int contextTopK;
+    private final List<ChatActionHandler> chatActionHandlers;
 
     public RagChatService(
             ConversationRepository conversationRepository,
@@ -84,95 +85,27 @@ public class RagChatService {
         this.ragRetrievalProperties = ragRetrievalProperties;
         this.ragAnswerGenerator = ragAnswerGenerator;
         this.contextTopK = contextTopK;
+        this.chatActionHandlers = List.of(
+                new NoKnowledgeChatActionHandler(),
+                new SearchKnowledgeActionHandler(),
+                new UsePreviousContextActionHandler(),
+                new UsePreviousAndSearchActionHandler()
+        );
     }
 
     public SendMessageResult sendMessage(Long conversationId, String content) {
         log.info("发送 RAG 会话消息入参: conversationId={}, contentLength={}", conversationId, content.length());
-        validateConversation(conversationId);
-        ConversationMessage userMessage = saveMessage(conversationId, MessageRole.USER, content);
-        List<ConversationMessage> recentMessages = ragConversationContextService.recentMessages(conversationId, userMessage.id());
-        Optional<RagConversationContextService.ReusableReferenceContext> reusableReferenceContext =
-                ragConversationContextService.latestReusableReferenceContext(conversationId);
-        List<KnowledgeBase> knowledgeBases = knowledgeBaseRepository.findAll();
-        RagRouter.RouteResult routeResult = route(content, knowledgeBases, recentMessages, reusableReferenceContext);
-        RagRouter.RouteResult normalizedRouteResult = normalizeRouteResult(routeResult);
-        List<ReferenceCandidate> referenceCandidates = List.of();
-        List<RagRetrievalService.RetrievalTaskReport> retrievalTaskReports = List.of();
-        String answerContent;
-        if (normalizedRouteResult.action() == RagRouterAction.NO_KB) {
-            log.info("发送 RAG 会话消息分支: NO_KB, conversationId={}", conversationId);
-            answerContent = generateAnswer(content, List.of(), recentMessages);
-        } else if (normalizedRouteResult.action() == RagRouterAction.SEARCH_KB) {
-            log.info("发送 RAG 会话消息分支: SEARCH_KB, conversationId={}, knowledgeBaseIds={}",
-                    conversationId, normalizedRouteResult.knowledgeBaseIds());
-            SearchReferenceResult searchReferenceResult = searchReferences(
-                    conversationId,
-                    userMessage,
-                    content,
-                    searchText(normalizedRouteResult, content),
-                    normalizedRouteResult,
-                    recentMessages,
-                    true
-            );
-            referenceCandidates = searchReferenceResult.referenceCandidates();
-            retrievalTaskReports = searchReferenceResult.taskReports();
-            if (referenceCandidates.isEmpty()) {
-                log.warn("发送 RAG 会话消息分支: 未检索到引用，按普通聊天处理, conversationId={}", conversationId);
-                answerContent = generateAnswer(content, List.of(), recentMessages);
-            } else {
-                answerContent = generateAnswer(content, toReferenceContexts(referenceCandidates), recentMessages);
-            }
-        } else if (isUsePreviousContext(normalizedRouteResult.action())) {
-            log.info("发送 RAG 会话消息分支: USE_PREVIOUS_CONTEXT, conversationId={}", conversationId);
-            if (reusableReferenceContext.isPresent()) {
-                referenceCandidates = toReferenceCandidates(reusableReferenceContext.get());
-                answerContent = generateAnswer(content, toReferenceContexts(referenceCandidates), recentMessages);
-            } else {
-                log.warn("发送 RAG 会话消息分支: USE_PREVIOUS_CONTEXT 未找到可复用引用，按普通聊天处理, conversationId={}", conversationId);
-                answerContent = generateAnswer(content, List.of(), recentMessages);
-            }
-        } else {
-            log.info("发送 RAG 会话消息分支: USE_PREVIOUS_AND_SEARCH, conversationId={}, knowledgeBaseIds={}",
-                    conversationId, normalizedRouteResult.knowledgeBaseIds());
-            List<ReferenceCandidate> previousCandidates = reusableReferenceContext
-                    .map(this::toReferenceCandidates)
-                    .orElse(List.of());
-            SearchReferenceResult searchReferenceResult = searchReferences(
-                    conversationId,
-                    userMessage,
-                    content,
-                    searchText(normalizedRouteResult, content),
-                    normalizedRouteResult,
-                    recentMessages,
-                    false
-            );
-            retrievalTaskReports = searchReferenceResult.taskReports();
-            List<ReferenceCandidate> combinedCandidates =
-                    combineReferenceCandidates(previousCandidates, searchReferenceResult.referenceCandidates());
-            RerankReferenceResult rerankReferenceResult = rerankReferenceCandidates(
-                    searchText(normalizedRouteResult, content),
-                    combinedCandidates
-            );
-            retrievalTaskReports = new ArrayList<>(retrievalTaskReports);
-            rerankReferenceResult.taskReport().ifPresent(retrievalTaskReports::add);
-            referenceCandidates = rerankReferenceResult.referenceCandidates().stream()
-                    .limit(contextTopK)
-                    .toList();
-            if (referenceCandidates.isEmpty()) {
-                log.warn("发送 RAG 会话消息分支: USE_PREVIOUS_AND_SEARCH 未获得引用，按普通聊天处理, conversationId={}", conversationId);
-                answerContent = generateAnswer(content, List.of(), recentMessages);
-            } else {
-                answerContent = generateAnswer(content, toReferenceContexts(referenceCandidates), recentMessages);
-            }
-        }
+        ChatFlowContext context = prepareChatFlowContext(conversationId, content);
+        ChatActionResult chatActionResult = executeChatAction(context);
+        String answerContent = generateAnswer(content, chatActionResult.answerReferences(), context.recentMessages());
         ConversationMessage assistantMessage = saveMessage(conversationId, MessageRole.ASSISTANT, answerContent);
-        ConversationRetrieval retrieval = saveRetrieval(conversationId, assistantMessage.id(), content, normalizedRouteResult);
-        List<ReferenceResult> references = saveReferences(retrieval.id(), referenceCandidates);
-        ragRetrievalService.saveTaskReports(retrieval.id(), retrievalTaskReports);
-        updateConversationTitleIfNeeded(conversationId, userMessage);
+        ConversationRetrieval retrieval = saveRetrieval(conversationId, assistantMessage.id(), content, context.routeResult());
+        List<ReferenceResult> references = saveReferences(retrieval.id(), chatActionResult.referenceCandidates());
+        ragRetrievalService.saveTaskReports(retrieval.id(), chatActionResult.retrievalTaskReports());
+        updateConversationTitleIfNeeded(conversationId, context.userMessage());
         log.info("发送 RAG 会话消息出参: conversationId={}, assistantMessageId={}, referenceCount={}",
                 conversationId, assistantMessage.id(), references.size());
-        return new SendMessageResult(assistantMessage, normalizedRouteResult, references);
+        return new SendMessageResult(assistantMessage, context.routeResult(), references);
     }
 
     public SendMessageResult sendMessageStream(
@@ -181,6 +114,26 @@ public class RagChatService {
             StreamEventConsumer streamEventConsumer
     ) {
         log.info("流式发送 RAG 会话消息入参: conversationId={}, contentLength={}", conversationId, content.length());
+        ChatFlowContext context = prepareChatFlowContext(conversationId, content);
+        streamEventConsumer.onEvent("router", context.routeResult());
+        ChatActionResult chatActionResult = executeChatAction(context);
+        streamEventConsumer.onEvent("retrieval_done", new RetrievalDoneEvent(chatActionResult.referenceCandidates().size()));
+        String answerContent = generateAnswerStream(content, chatActionResult.answerReferences(), context.recentMessages(), streamEventConsumer);
+        ConversationMessage assistantMessage = saveMessage(conversationId, MessageRole.ASSISTANT, answerContent);
+        ConversationRetrieval retrieval = saveRetrieval(conversationId, assistantMessage.id(), content, context.routeResult());
+        List<ReferenceResult> references = saveReferences(retrieval.id(), chatActionResult.referenceCandidates());
+        ragRetrievalService.saveTaskReports(retrieval.id(), chatActionResult.retrievalTaskReports());
+        updateConversationTitleIfNeeded(conversationId, context.userMessage());
+        SendMessageResult result = new SendMessageResult(assistantMessage, context.routeResult(), references);
+        streamEventConsumer.onEvent("answer_done", new AnswerDoneEvent(assistantMessage.id(), answerContent));
+        streamEventConsumer.onEvent("references", references);
+        log.info("流式发送 RAG 会话消息出参: conversationId={}, assistantMessageId={}, referenceCount={}",
+                conversationId, assistantMessage.id(), references.size());
+        return result;
+    }
+
+    private ChatFlowContext prepareChatFlowContext(Long conversationId, String content) {
+        log.info("准备 RAG 聊天流程上下文入参: conversationId={}, contentLength={}", conversationId, content.length());
         validateConversation(conversationId);
         ConversationMessage userMessage = saveMessage(conversationId, MessageRole.USER, content);
         List<ConversationMessage> recentMessages = ragConversationContextService.recentMessages(conversationId, userMessage.id());
@@ -189,75 +142,40 @@ public class RagChatService {
         List<KnowledgeBase> knowledgeBases = knowledgeBaseRepository.findAll();
         RagRouter.RouteResult routeResult = route(content, knowledgeBases, recentMessages, reusableReferenceContext);
         RagRouter.RouteResult normalizedRouteResult = normalizeRouteResult(routeResult);
-        streamEventConsumer.onEvent("router", normalizedRouteResult);
-        List<ReferenceCandidate> referenceCandidates = List.of();
-        List<RagRetrievalService.RetrievalTaskReport> retrievalTaskReports = List.of();
-        List<RagAnswerGenerator.ReferenceContext> answerReferences = List.of();
-        if (normalizedRouteResult.action() == RagRouterAction.SEARCH_KB) {
-            SearchReferenceResult searchReferenceResult = searchReferences(
-                    conversationId,
-                    userMessage,
-                    content,
-                    searchText(normalizedRouteResult, content),
-                    normalizedRouteResult,
-                    recentMessages,
-                    true
-            );
-            referenceCandidates = searchReferenceResult.referenceCandidates();
-            retrievalTaskReports = searchReferenceResult.taskReports();
-            answerReferences = toReferenceContexts(referenceCandidates);
-        } else if (isUsePreviousContext(normalizedRouteResult.action())) {
-            if (reusableReferenceContext.isPresent()) {
-                referenceCandidates = toReferenceCandidates(reusableReferenceContext.get());
-                answerReferences = toReferenceContexts(referenceCandidates);
-                log.info("流式发送 RAG 会话消息分支: USE_PREVIOUS_CONTEXT 复用引用, conversationId={}, referenceCount={}",
-                        conversationId, referenceCandidates.size());
-            } else {
-                log.warn("流式发送 RAG 会话消息分支: USE_PREVIOUS_CONTEXT 未找到可复用引用，按普通聊天处理, conversationId={}",
-                        conversationId);
-            }
-        } else if (normalizedRouteResult.action() == RagRouterAction.USE_PREVIOUS_AND_SEARCH) {
-            List<ReferenceCandidate> previousCandidates = reusableReferenceContext
-                    .map(this::toReferenceCandidates)
-                    .orElse(List.of());
-            SearchReferenceResult searchReferenceResult = searchReferences(
-                    conversationId,
-                    userMessage,
-                    content,
-                    searchText(normalizedRouteResult, content),
-                    normalizedRouteResult,
-                    recentMessages,
-                    false
-            );
-            retrievalTaskReports = searchReferenceResult.taskReports();
-            List<ReferenceCandidate> combinedCandidates =
-                    combineReferenceCandidates(previousCandidates, searchReferenceResult.referenceCandidates());
-            RerankReferenceResult rerankReferenceResult = rerankReferenceCandidates(
-                    searchText(normalizedRouteResult, content),
-                    combinedCandidates
-            );
-            retrievalTaskReports = new ArrayList<>(retrievalTaskReports);
-            rerankReferenceResult.taskReport().ifPresent(retrievalTaskReports::add);
-            referenceCandidates = rerankReferenceResult.referenceCandidates().stream()
-                    .limit(contextTopK)
-                    .toList();
-            answerReferences = toReferenceContexts(referenceCandidates);
-            log.info("流式发送 RAG 会话消息分支: USE_PREVIOUS_AND_SEARCH, conversationId={}, referenceCount={}",
-                    conversationId, referenceCandidates.size());
-        }
-        streamEventConsumer.onEvent("retrieval_done", new RetrievalDoneEvent(referenceCandidates.size()));
-        String answerContent = generateAnswerStream(content, answerReferences, recentMessages, streamEventConsumer);
-        ConversationMessage assistantMessage = saveMessage(conversationId, MessageRole.ASSISTANT, answerContent);
-        ConversationRetrieval retrieval = saveRetrieval(conversationId, assistantMessage.id(), content, normalizedRouteResult);
-        List<ReferenceResult> references = saveReferences(retrieval.id(), referenceCandidates);
-        ragRetrievalService.saveTaskReports(retrieval.id(), retrievalTaskReports);
-        updateConversationTitleIfNeeded(conversationId, userMessage);
-        SendMessageResult result = new SendMessageResult(assistantMessage, normalizedRouteResult, references);
-        streamEventConsumer.onEvent("answer_done", new AnswerDoneEvent(assistantMessage.id(), answerContent));
-        streamEventConsumer.onEvent("references", references);
-        log.info("流式发送 RAG 会话消息出参: conversationId={}, assistantMessageId={}, referenceCount={}",
-                conversationId, assistantMessage.id(), references.size());
+        log.info("准备 RAG 聊天流程上下文出参: conversationId={}, userMessageId={}, action={}, recentMessageCount={}, previousContextAvailable={}",
+                conversationId, userMessage.id(), normalizedRouteResult.action(), recentMessages.size(),
+                reusableReferenceContext.isPresent());
+        return new ChatFlowContext(
+                conversationId,
+                content,
+                userMessage,
+                recentMessages,
+                reusableReferenceContext,
+                normalizedRouteResult
+        );
+    }
+
+    private ChatActionResult executeChatAction(ChatFlowContext context) {
+        log.info("执行 RAG 聊天 Action 入参: conversationId={}, action={}",
+                context.conversationId(), context.routeResult().action());
+        ChatActionHandler chatActionHandler = resolveActionHandler(context.routeResult().action());
+        ChatActionResult result = chatActionHandler.handle(context);
+        log.info("执行 RAG 聊天 Action 出参: conversationId={}, action={}, referenceCount={}, taskCount={}",
+                context.conversationId(), context.routeResult().action(),
+                result.referenceCandidates().size(), result.retrievalTaskReports().size());
         return result;
+    }
+
+    private ChatActionHandler resolveActionHandler(RagRouterAction action) {
+        for (ChatActionHandler chatActionHandler : chatActionHandlers) {
+            if (chatActionHandler.supports(action)) {
+                log.info("解析 RAG 聊天 Action Handler 出参: action={}, handler={}",
+                        action, chatActionHandler.getClass().getSimpleName());
+                return chatActionHandler;
+            }
+        }
+        log.error("解析 RAG 聊天 Action Handler 异常: action={}", action);
+        throw new IllegalStateException("不支持的 RAG 聊天 Action: " + action);
     }
 
     private void validateConversation(Long conversationId) {
@@ -753,6 +671,159 @@ public class RagChatService {
         }
         conversationRepository.updateTitle(conversationId, title);
         log.info("更新会话标题出参: conversationId={}, title={}", conversationId, title);
+    }
+
+    private interface ChatActionHandler {
+
+        boolean supports(RagRouterAction action);
+
+        ChatActionResult handle(ChatFlowContext context);
+    }
+
+    private class NoKnowledgeChatActionHandler implements ChatActionHandler {
+
+        @Override
+        public boolean supports(RagRouterAction action) {
+            return action == RagRouterAction.NO_KB;
+        }
+
+        @Override
+        public ChatActionResult handle(ChatFlowContext context) {
+            log.info("RAG 聊天 Action 分支: NO_KB, conversationId={}", context.conversationId());
+            return new ChatActionResult(List.of(), List.of(), List.of());
+        }
+    }
+
+    private class SearchKnowledgeActionHandler implements ChatActionHandler {
+
+        @Override
+        public boolean supports(RagRouterAction action) {
+            return action == RagRouterAction.SEARCH_KB;
+        }
+
+        @Override
+        public ChatActionResult handle(ChatFlowContext context) {
+            log.info("RAG 聊天 Action 分支: SEARCH_KB, conversationId={}, knowledgeBaseIds={}",
+                    context.conversationId(), context.routeResult().knowledgeBaseIds());
+            SearchReferenceResult searchReferenceResult = searchReferences(
+                    context.conversationId(),
+                    context.userMessage(),
+                    context.content(),
+                    searchText(context.routeResult(), context.content()),
+                    context.routeResult(),
+                    context.recentMessages(),
+                    true
+            );
+            List<ReferenceCandidate> referenceCandidates = searchReferenceResult.referenceCandidates();
+            if (referenceCandidates.isEmpty()) {
+                log.warn("RAG 聊天 Action 分支: SEARCH_KB 未检索到引用，按普通聊天处理, conversationId={}",
+                        context.conversationId());
+                return new ChatActionResult(
+                        referenceCandidates,
+                        searchReferenceResult.taskReports(),
+                        List.of()
+                );
+            }
+            return new ChatActionResult(
+                    referenceCandidates,
+                    searchReferenceResult.taskReports(),
+                    toReferenceContexts(referenceCandidates)
+            );
+        }
+    }
+
+    private class UsePreviousContextActionHandler implements ChatActionHandler {
+
+        @Override
+        public boolean supports(RagRouterAction action) {
+            return isUsePreviousContext(action);
+        }
+
+        @Override
+        public ChatActionResult handle(ChatFlowContext context) {
+            log.info("RAG 聊天 Action 分支: USE_PREVIOUS_CONTEXT, conversationId={}", context.conversationId());
+            if (context.reusableReferenceContext().isEmpty()) {
+                log.warn("RAG 聊天 Action 分支: USE_PREVIOUS_CONTEXT 未找到可复用引用，按普通聊天处理, conversationId={}",
+                        context.conversationId());
+                return new ChatActionResult(List.of(), List.of(), List.of());
+            }
+            List<ReferenceCandidate> referenceCandidates = toReferenceCandidates(context.reusableReferenceContext().get());
+            log.info("RAG 聊天 Action 分支: USE_PREVIOUS_CONTEXT 复用引用, conversationId={}, referenceCount={}",
+                    context.conversationId(), referenceCandidates.size());
+            return new ChatActionResult(
+                    referenceCandidates,
+                    List.of(),
+                    toReferenceContexts(referenceCandidates)
+            );
+        }
+    }
+
+    private class UsePreviousAndSearchActionHandler implements ChatActionHandler {
+
+        @Override
+        public boolean supports(RagRouterAction action) {
+            return action == RagRouterAction.USE_PREVIOUS_AND_SEARCH;
+        }
+
+        @Override
+        public ChatActionResult handle(ChatFlowContext context) {
+            log.info("RAG 聊天 Action 分支: USE_PREVIOUS_AND_SEARCH, conversationId={}, knowledgeBaseIds={}",
+                    context.conversationId(), context.routeResult().knowledgeBaseIds());
+            List<ReferenceCandidate> previousCandidates = context.reusableReferenceContext()
+                    .map(RagChatService.this::toReferenceCandidates)
+                    .orElse(List.of());
+            SearchReferenceResult searchReferenceResult = searchReferences(
+                    context.conversationId(),
+                    context.userMessage(),
+                    context.content(),
+                    searchText(context.routeResult(), context.content()),
+                    context.routeResult(),
+                    context.recentMessages(),
+                    false
+            );
+            List<ReferenceCandidate> combinedCandidates =
+                    combineReferenceCandidates(previousCandidates, searchReferenceResult.referenceCandidates());
+            RerankReferenceResult rerankReferenceResult = rerankReferenceCandidates(
+                    searchText(context.routeResult(), context.content()),
+                    combinedCandidates
+            );
+            List<RagRetrievalService.RetrievalTaskReport> retrievalTaskReports =
+                    new ArrayList<>(searchReferenceResult.taskReports());
+            rerankReferenceResult.taskReport().ifPresent(retrievalTaskReports::add);
+            List<ReferenceCandidate> referenceCandidates = rerankReferenceResult.referenceCandidates().stream()
+                    .limit(contextTopK)
+                    .toList();
+            if (referenceCandidates.isEmpty()) {
+                log.warn("RAG 聊天 Action 分支: USE_PREVIOUS_AND_SEARCH 未获得引用，按普通聊天处理, conversationId={}",
+                        context.conversationId());
+                return new ChatActionResult(referenceCandidates, retrievalTaskReports, List.of());
+            }
+            log.info("RAG 聊天 Action 分支: USE_PREVIOUS_AND_SEARCH 出参, conversationId={}, previousCount={}, searchCount={}, finalCount={}",
+                    context.conversationId(), previousCandidates.size(),
+                    searchReferenceResult.referenceCandidates().size(), referenceCandidates.size());
+            return new ChatActionResult(
+                    referenceCandidates,
+                    retrievalTaskReports,
+                    toReferenceContexts(referenceCandidates)
+            );
+        }
+    }
+
+    private record ChatFlowContext(
+            Long conversationId,
+            String content,
+            ConversationMessage userMessage,
+            List<ConversationMessage> recentMessages,
+            Optional<RagConversationContextService.ReusableReferenceContext> reusableReferenceContext,
+            RagRouter.RouteResult routeResult
+    ) {
+    }
+
+    private record ChatActionResult(
+            List<ReferenceCandidate> referenceCandidates,
+            List<RagRetrievalService.RetrievalTaskReport> retrievalTaskReports,
+            List<RagAnswerGenerator.ReferenceContext> answerReferences
+    ) {
     }
 
     private record ReferenceCandidate(
