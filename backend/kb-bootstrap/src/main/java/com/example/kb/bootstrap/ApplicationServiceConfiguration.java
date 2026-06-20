@@ -42,6 +42,12 @@ import com.example.kb.application.service.RagContextProperties;
 import com.example.kb.application.service.RagRetrievalProperties;
 import com.example.kb.application.service.RagRetrievalService;
 import com.example.kb.application.service.RrfFusionService;
+import com.example.kb.application.service.retrieval.Bm25RetrievalTaskExecutor;
+import com.example.kb.application.service.retrieval.HydeDenseRetrievalTaskExecutor;
+import com.example.kb.application.service.retrieval.MultiQueryDenseRetrievalTaskExecutor;
+import com.example.kb.application.service.retrieval.OriginalDenseRetrievalTaskExecutor;
+import com.example.kb.application.service.retrieval.RetrievalTaskExecutor;
+import com.example.kb.application.service.retrieval.RewriteDenseRetrievalTaskExecutor;
 import com.example.kb.infrastructure.embedding.DashScopeEmbeddingGenerator;
 import com.example.kb.infrastructure.embedding.EmbeddingProperties;
 import com.example.kb.infrastructure.enrichment.AgentScopeChunkEnrichmentGenerator;
@@ -64,6 +70,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.env.Environment;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -273,14 +281,29 @@ public class ApplicationServiceConfiguration {
     }
 
     @Bean
-    public RerankGenerator rerankGenerator(
-            RagProperties ragProperties,
-            RagRetrievalProperties ragRetrievalProperties
-    ) {
+    public RerankGenerator rerankGenerator(RagRetrievalProperties ragRetrievalProperties) {
         log.info("Rerank 生成器分支: 使用 DashScope, provider={}, model={}, enabled={}",
                 "dashscope", ragRetrievalProperties.safeRerankModel(),
                 ragRetrievalProperties.isRerankEnabled());
         return new DashScopeRerankGenerator(ragRetrievalProperties);
+    }
+
+    @Bean
+    public List<RetrievalTaskExecutor> retrievalTaskExecutors(
+            QueryRewriteGenerator queryRewriteGenerator,
+            HydeGenerator hydeGenerator,
+            MultiQueryGenerator multiQueryGenerator,
+            EmbeddingGenerator embeddingGenerator,
+            VectorIndexSearcher vectorIndexSearcher,
+            KeywordIndexSearcher keywordIndexSearcher
+    ) {
+        List<RetrievalTaskExecutor> executors = new ArrayList<>();
+        executors.add(new OriginalDenseRetrievalTaskExecutor(embeddingGenerator, vectorIndexSearcher));
+        executors.add(new RewriteDenseRetrievalTaskExecutor(queryRewriteGenerator, embeddingGenerator, vectorIndexSearcher));
+        executors.add(new HydeDenseRetrievalTaskExecutor(hydeGenerator, embeddingGenerator, vectorIndexSearcher));
+        executors.add(new MultiQueryDenseRetrievalTaskExecutor(multiQueryGenerator, embeddingGenerator, vectorIndexSearcher));
+        executors.add(new Bm25RetrievalTaskExecutor(keywordIndexSearcher));
+        return executors;
     }
 
     @Bean(destroyMethod = "shutdown")
@@ -301,12 +324,7 @@ public class ApplicationServiceConfiguration {
 
     @Bean
     public RagRetrievalService ragRetrievalService(
-            QueryRewriteGenerator queryRewriteGenerator,
-            HydeGenerator hydeGenerator,
-            MultiQueryGenerator multiQueryGenerator,
-            EmbeddingGenerator embeddingGenerator,
-            VectorIndexSearcher vectorIndexSearcher,
-            KeywordIndexSearcher keywordIndexSearcher,
+            List<RetrievalTaskExecutor> retrievalTaskExecutors,
             ConversationRetrievalTaskRepository conversationRetrievalTaskRepository,
             ConversationRetrievalTaskHitRepository conversationRetrievalTaskHitRepository,
             RrfFusionService rrfFusionService,
@@ -314,12 +332,7 @@ public class ApplicationServiceConfiguration {
             @Qualifier("ragRetrievalExecutorService") ExecutorService ragRetrievalExecutorService
     ) {
         return new RagRetrievalService(
-                queryRewriteGenerator,
-                hydeGenerator,
-                multiQueryGenerator,
-                embeddingGenerator,
-                vectorIndexSearcher,
-                keywordIndexSearcher,
+                retrievalTaskExecutors,
                 conversationRetrievalTaskRepository,
                 conversationRetrievalTaskHitRepository,
                 rrfFusionService,
